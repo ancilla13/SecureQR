@@ -1,0 +1,67 @@
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 32px;
+  margin: 16px;
+  border-radius: 16px;
+  position: sticky;
+  top: 16px;
+  z-index: 100;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  font-size: 1.5rem;
+}
+
+.text-accent-primary {
+  color: var(--accent-primary);
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.nav-links {
+  display: flex;
+  gap: 24px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+  color: var(--text-primary);
+}
+
+.main-content {
+  flex: 1;
+  padding: 32px 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}

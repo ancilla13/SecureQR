@@ -1,0 +1,29 @@
+{
+  "issuers": [
+    {
+      "id": "apex-university",
+      "name": "Apex University Registrar",
+      "description": "Official Academic Credentials & Verification Authority",
+      "website": "https://portal.apex.edu",
+      "keys": [
+        {
+          "key_ops": [
+            "verify"
+          ],
+          "ext": true,
+          "kty": "EC",
+          "x": "0tiMEIboVB19MnPehKFlJOGh99Oc74gGv-89QsDWCpA",
+          "y": "K0kseQY5dEa9uHBBzieh96tC7J4cOjao-pgJF9K5caw",
+          "crv": "P-256",
+          "kid": "key_2026_01",
+          "status": "active",
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "revokedTokens": [
+        "token_revoked_099"
+      ],
+      "revokedKeys": []
+    }
+  ]
+}
