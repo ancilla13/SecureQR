@@ -25,8 +25,10 @@ import {
 import { 
   findContactByKeyOrKid, 
   computeKeyFingerprint,
-  validatePublicKeyJWK 
+  validatePublicKeyJWK,
+  loadActiveIdentity
 } from './keystore.js';
+import cachedRegistry from '../data/cachedTrustedIssuers.json';
 import { analyzeThreat, analyzeThreatAsync } from './layer3_threat.js';
 
 export const VERIFICATION_OUTCOMES = {
@@ -85,11 +87,12 @@ export function parseScannedText(rawText) {
           };
         }
 
-        if (parsed.content === undefined || parsed.content === null) {
+        const contentVal = parsed.content !== undefined ? parsed.content : parsed.data;
+        if (contentVal === undefined || contentVal === null) {
           return {
             isSigned: true,
             isMalformed: true,
-            error: 'Missing required "content" property in signed payload.',
+            error: 'Missing required "content" or "data" property in signed payload.',
             rawText: trimmed
           };
         }
@@ -118,11 +121,13 @@ export function parseScannedText(rawText) {
           payload: {
             v: Number(parsed.v || 1),
             kid: String(parsed.kid || ''),
-            name: String(parsed.name || ''),
+            name: String(parsed.name || parsed.iss || ''),
+            iss: parsed.iss ? String(parsed.iss) : undefined,
+            data: parsed.data !== undefined ? String(parsed.data) : undefined,
             iat: parsed.iat ? Number(parsed.iat) : Math.floor(Date.now() / 1000),
             exp: parsed.exp !== null && parsed.exp !== undefined ? Number(parsed.exp) : null,
-            contentType: String(parsed.contentType || detectContentType(String(parsed.content))),
-            content: String(parsed.content),
+            contentType: String(parsed.contentType || parsed.type || detectContentType(String(contentVal))),
+            content: String(contentVal),
             sig: String(sig)
           },
           rawText: trimmed
@@ -234,6 +239,53 @@ export async function verifyScannedPayload(rawText, options = {}) {
     contactRecord = await findContactByKeyOrKid(payload.kid);
     if (contactRecord) {
       keyJWKToUse = contactRecord.publicKeyJWK;
+    } else {
+      // 1. Check if it's the active user's own identity from IndexedDB
+      try {
+        const own = await loadActiveIdentity();
+        const ownJWK = own?.identity?.publicKey || own?.identity?.publicKeyJWK;
+        if (own?.identity && (own.identity.kid === payload.kid || ownJWK?.kid === payload.kid)) {
+          keyJWKToUse = ownJWK;
+          contactRecord = {
+            name: `${own.identity.alias || 'Personal Identity'} (You)`,
+            isTrusted: true,
+            fingerprint: own.identity.fingerprint,
+            publicKeyJWK: ownJWK
+          };
+        }
+      } catch (err) {
+        console.warn('Error checking own identity in verifyPipeline:', err);
+      }
+
+      // 2. Check cached official issuer registry (e.g. apex-university)
+      if (!keyJWKToUse) {
+        try {
+          const cached = cachedRegistry.issuers;
+          if (cached && Array.isArray(cached)) {
+            for (const issuer of cached) {
+              const foundKey = issuer.keys?.find(k => k.kid === payload.kid || issuer.id === payload.iss || issuer.id === payload.name);
+              if (foundKey) {
+                keyJWKToUse = {
+                  kty: 'EC',
+                  crv: 'P-256',
+                  x: foundKey.x,
+                  y: foundKey.y,
+                  kid: foundKey.kid
+                };
+                contactRecord = {
+                  name: `${issuer.name} (Official Issuer)`,
+                  isTrusted: true,
+                  fingerprint: foundKey.fingerprint || foundKey.kid,
+                  publicKeyJWK: keyJWKToUse
+                };
+                break;
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 

@@ -3,14 +3,123 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { 
   Camera, Upload, Clipboard, ShieldCheck, ShieldAlert, AlertTriangle, 
   HelpCircle, RefreshCw, Copy, Check, ExternalLink, Globe, FileText, 
-  Lock, X, ShieldQuestion, UserPlus, Info, CheckCircle2, ChevronRight
+  Lock, X, ShieldQuestion, UserPlus, Info, CheckCircle2, ChevronRight,
+  FileUp, Image as ImageIcon, Sparkles, FolderOpen, Download
 } from 'lucide-react';
 import { verifyScannedPayload, VERIFICATION_OUTCOMES } from '../engine/verifyPipeline.js';
 import { saveContact, setContactTrustStatus, getAllContacts } from '../engine/keystore.js';
+import demoVectors from '../data/demoVectors.json';
 import '../styles/wallet.css';
 
+// Robust multi-layer QR image decoder with native hardware acceleration & fallback
+async function decodeQrImage(fileOrBlob) {
+  const file = fileOrBlob instanceof File
+    ? fileOrBlob
+    : new File([fileOrBlob], 'downloaded_qr.png', { type: fileOrBlob.type || 'image/png' });
+
+  // Ensure file has an image type so that html5-qrcode and browsers recognize it
+  const normalizedFile = (!file.type || !file.type.startsWith('image/'))
+    ? new File([file], file.name && file.name.includes('.') ? file.name : `${file.name || 'qr_code'}.png`, {
+        type: 'image/png',
+        lastModified: file.lastModified || Date.now()
+      })
+    : file;
+
+  let lastError = null;
+
+  // Layer 1: Native Chromium BarcodeDetector API (fastest, lossless raw bitmap)
+  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    try {
+      const formats = (await window.BarcodeDetector.getSupportedFormats?.()) || ['qr_code'];
+      if (formats.includes('qr_code')) {
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const imgUrl = URL.createObjectURL(normalizedFile);
+        try {
+          const img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = (e) => reject(new Error('Browser could not render image.'));
+            image.src = imgUrl;
+          });
+          const barcodes = await detector.detect(img);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            return barcodes[0].rawValue;
+          }
+        } finally {
+          URL.revokeObjectURL(imgUrl);
+        }
+      }
+    } catch (bdErr) {
+      console.warn('Native BarcodeDetector layer notice:', bdErr);
+      lastError = bdErr;
+    }
+  }
+
+  // Layer 2: Html5Qrcode.scanFile
+  try {
+    let container = document.getElementById('file-scanner-temp');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'file-scanner-temp';
+      container.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1600px;height:1600px;opacity:0;pointer-events:none;';
+      document.body.appendChild(container);
+    }
+    const qrScanner = new Html5Qrcode('file-scanner-temp', { verbose: false });
+    const decoded = await qrScanner.scanFile(normalizedFile, false);
+    try { await qrScanner.clear(); } catch {}
+    if (decoded) return decoded;
+  } catch (html5Err) {
+    console.warn('Html5Qrcode scanFile layer notice:', html5Err);
+    lastError = html5Err;
+  }
+
+  // Layer 3: High-contrast / inverted canvas fallback (for dark-mode QR codes)
+  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      const imgUrl = URL.createObjectURL(normalizedFile);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = imgUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            d[i] = 255 - d[i];
+            d[i + 1] = 255 - d[i + 1];
+            d[i + 2] = 255 - d[i + 2];
+          }
+          ctx.putImageData(imgData, 0, 0);
+          const barcodes = await detector.detect(canvas);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            return barcodes[0].rawValue;
+          }
+        }
+      } finally {
+        URL.revokeObjectURL(imgUrl);
+      }
+    } catch (invErr) {
+      console.warn('Canvas invert decode layer notice:', invErr);
+    }
+  }
+
+  throw new Error(
+    lastError?.message ||
+    'Could not locate or decode a valid QR code in this image. Please ensure the QR code is sharp, high-contrast, and uncropped.'
+  );
+}
+
 export default function Scanner() {
-  const [activeTab, setActiveTab] = useState('camera'); // 'camera' | 'upload' | 'paste'
+  const [activeTab, setActiveTab] = useState('camera'); // 'camera' | 'paste'
   
   // Camera state machine: 'IDLE' | 'SCANNING' | 'PERMISSION_DENIED' | 'UNAVAILABLE'
   const [cameraState, setCameraState] = useState('IDLE');
@@ -21,6 +130,8 @@ export default function Scanner() {
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [errorBanner, setErrorBanner] = useState('');
   const [pasteInput, setPasteInput] = useState('');
@@ -36,11 +147,144 @@ export default function Scanner() {
   const html5QrCodeRef = useRef(null);
   const fileInputRef = useRef(null);
   const lastProcessedRef = useRef({ text: '', timestamp: 0 });
+  const dragCounterRef = useRef(0);
+  const processQrFileRef = useRef(null);
+  const handleProcessScannedTextRef = useRef(null);
 
-  // Camera cleanup on unmount or tab switch
+  // Camera cleanup on unmount
   useEffect(() => {
     return () => {
       stopCamera();
+    };
+  }, []);
+
+  // Window drag & drop and paste event listeners
+  useEffect(() => {
+    const handleDragEnter = (e) => {
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      setIsDragging(true);
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+      if (!isDragging) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDragging(false);
+      }
+    };
+
+    const handleWindowDrop = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+
+      let file = null;
+
+      // 1. Check e.dataTransfer.files
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        file = e.dataTransfer.files[0];
+      }
+
+      // 2. Check e.dataTransfer.items
+      if (!file && e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
+        for (let i = 0; i < e.dataTransfer.items.length; i++) {
+          const item = e.dataTransfer.items[i];
+          if (item.kind === 'file') {
+            const f = item.getAsFile();
+            if (f) {
+              file = f;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Check if a URL was dragged (e.g. from Chrome download popup, another tab, or image link)
+      if (!file && e.dataTransfer) {
+        const url = e.dataTransfer.getData('URL') || e.dataTransfer.getData('text/uri-list');
+        if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:'))) {
+          try {
+            setIsProcessing(true);
+            setProcessingStatus('Fetching dropped QR image...');
+            const res = await fetch(url);
+            const blob = await res.blob();
+            file = new File([blob], 'downloaded_qr.png', { type: blob.type || 'image/png' });
+          } catch (urlErr) {
+            console.warn('Could not fetch dragged URL:', urlErr);
+          }
+        }
+      }
+
+      if (file) {
+        if (processQrFileRef.current) {
+          await processQrFileRef.current(file);
+        }
+        return;
+      }
+
+      // 4. Check if direct text / JSON was dropped
+      if (e.dataTransfer) {
+        const text = e.dataTransfer.getData('text/plain');
+        if (text && text.trim() && handleProcessScannedTextRef.current) {
+          await handleProcessScannedTextRef.current(text.trim());
+          return;
+        }
+      }
+    };
+
+    const handleWindowPaste = async (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            if (processQrFileRef.current) {
+              await processQrFileRef.current(file);
+            }
+            return;
+          }
+        }
+      }
+
+      // If text pasted while on camera view, automatically process
+      const text = e.clipboardData?.getData('text');
+      if (text && text.trim().length > 10 && (text.includes('{') || text.includes('.'))) {
+        e.preventDefault();
+        if (handleProcessScannedTextRef.current) {
+          await handleProcessScannedTextRef.current(text.trim());
+        }
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('drop', handleWindowDrop);
+    window.addEventListener('paste', handleWindowPaste);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('drop', handleWindowDrop);
+      window.removeEventListener('paste', handleWindowPaste);
     };
   }, []);
 
@@ -194,42 +438,117 @@ export default function Scanner() {
       setIsProcessing(false);
     }
   };
+  handleProcessScannedTextRef.current = handleProcessScannedText;
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Process any QR file (from device file picker, drag-and-drop, or clipboard paste)
+  const processQrFile = async (rawFile) => {
+    if (!rawFile) return;
 
     setErrorBanner('');
     setScanResult(null);
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setErrorBanner('Invalid file type: Please upload an image file (PNG, JPG, SVG, WebP).');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
-    // Validate file size (max 10MB)
-    const MAX_SIZE = 10 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      setErrorBanner('File too large: Image size exceeds 10 MB maximum limit.');
+    // Validate file size (max 25MB)
+    const MAX_SIZE = 25 * 1024 * 1024;
+    if (rawFile.size > MAX_SIZE) {
+      setErrorBanner('File too large: File size exceeds 25 MB maximum limit.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     setIsProcessing(true);
+    setProcessingStatus('Reading QR file...');
 
     try {
-      const qrScanner = new Html5Qrcode('file-scanner-temp');
-      const decodedText = await qrScanner.scanFile(file, true);
-      await qrScanner.clear();
+      // Check if dropped file is JSON or plain text
+      const isTextOrJson = 
+        rawFile.type === 'application/json' || 
+        rawFile.type === 'text/plain' || 
+        /\.(json|txt)$/i.test(rawFile.name);
+
+      if (isTextOrJson) {
+        try {
+          const textContent = await rawFile.text();
+          if (textContent && textContent.trim()) {
+            await handleProcessScannedText(textContent.trim());
+            return;
+          }
+        } catch {
+          // If text read fails, continue to image decode
+        }
+      }
+
+      setProcessingStatus('Decoding QR code from image...');
+      const decodedText = await decodeQrImage(rawFile);
       await handleProcessScannedText(decodedText);
     } catch (err) {
       console.error('Image scan failure:', err);
-      setErrorBanner('Could not locate or decode a valid QR code in this image. Please ensure the QR code is high contrast, sharp, and uncropped.');
+      // Fallback: check if raw file has text content (e.g. extensionless JSON file)
+      try {
+        const fallbackText = await rawFile.text();
+        if (fallbackText && fallbackText.trim().length > 10 && (fallbackText.includes('{') || fallbackText.includes('payload') || fallbackText.includes('.'))) {
+          await handleProcessScannedText(fallbackText.trim());
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      setErrorBanner(
+        err?.message || 
+        'Could not locate or decode a valid QR code in this image. Please ensure the QR code is sharp, high-contrast, and uncropped.'
+      );
     } finally {
       setIsProcessing(false);
+      setProcessingStatus('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+  processQrFileRef.current = processQrFile;
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processQrFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      await processQrFile(file);
+    }
+  };
+
+  const handleLoadDemoQr = async (demo) => {
+    try {
+      setIsProcessing(true);
+      setProcessingStatus(`Loading sample pass: ${demo.title}...`);
+      const res = await fetch(demo.image);
+      const blob = await res.blob();
+      const file = new File([blob], `${demo.id}.png`, { type: 'image/png' });
+      await processQrFile(file);
+    } catch (err) {
+      console.error('Demo loading failed:', err);
+      setErrorBanner(`Failed to load sample QR: ${err.message}`);
+      setIsProcessing(false);
+      setProcessingStatus('');
     }
   };
 
@@ -327,12 +646,14 @@ export default function Scanner() {
       case 'UNABLE_TO_VERIFY':
       default:
         return {
-          icon: <ShieldAlert size={36} style={{ color: '#7c3aed' }} />,
-          title: 'Unable to Verify — Malformed Payload or Unsupported Key',
-          badgeClass: 'alert-danger',
-          bannerBg: '#faf5ff',
-          borderColor: '#d8b4fe',
-          textColor: '#581c87'
+          icon: <ShieldAlert size={36} style={{ color: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#d97706' : '#7c3aed' }} />,
+          title: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND'
+            ? 'Signed QR — Creator Public Key Not in Keystore'
+            : 'Unable to Verify — Malformed Payload or Unsupported Key',
+          badgeClass: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? 'chip-warning' : 'alert-danger',
+          bannerBg: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#fffbeb' : '#faf5ff',
+          borderColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#fcd34d' : '#d8b4fe',
+          textColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#92400e' : '#581c87'
         };
     }
   };
@@ -347,8 +668,64 @@ export default function Scanner() {
         </p>
       </div>
 
-      {/* Hidden file scanner container for html5-qrcode */}
-      <div id="file-scanner-temp" style={{ display: 'none' }}></div>
+      {/* Full-Screen Drag & Drop Overlay */}
+      {isDragging && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(15, 23, 42, 0.82)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '4px dashed #6366f1',
+          zIndex: 999999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          color: '#ffffff'
+        }}>
+          <div style={{
+            background: 'rgba(30, 41, 59, 0.95)',
+            border: '1.5px solid rgba(99, 102, 241, 0.4)',
+            borderRadius: '24px',
+            padding: '44px 56px',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center'
+          }}>
+            <FileUp size={64} style={{ color: '#818cf8', animation: 'bounce 1s infinite' }} />
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f8fafc', marginTop: '20px', letterSpacing: '-0.02em' }}>
+              Drop QR Code Anywhere to Verify
+            </h2>
+            <p style={{ color: '#cbd5e1', fontSize: '1.05rem', marginTop: '8px', maxWidth: '420px' }}>
+              Release file from Chrome downloads, file explorer, or desktop to decode and verify immediately
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Global Hidden file scanner container for html5-qrcode (sized to prevent downsampling) */}
+      <div 
+        id="file-scanner-temp" 
+        style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '1600px', height: '1600px', opacity: 0, pointerEvents: 'none' }}
+      ></div>
+
+      {/* Unconditional file input for device storage / downloads */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.bmp,.gif,.json,.txt,*"
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+      />
 
       {contactSavedMsg && (
         <div className="wallet-alert alert-success animate-fade-in">
@@ -364,24 +741,34 @@ export default function Scanner() {
         </div>
       )}
 
+      {isProcessing && (
+        <div className="wallet-alert animate-fade-in" style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1d4ed8' }}>
+          <RefreshCw size={20} className="spin" />
+          <span style={{ fontWeight: 600 }}>{processingStatus || 'Verifying QR code payload...'}</span>
+        </div>
+      )}
+
       {!scanResult ? (
-        <div className="wallet-card">
-          {/* Input Method Switcher */}
-          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--wallet-border)', paddingBottom: '16px', marginBottom: '20px' }}>
+        <div 
+          className="wallet-card"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          style={{ position: 'relative' }}
+        >
+
+          {/* High-Contrast Segmented Navigation Bar */}
+          <div className="scanner-tab-bar">
             <button 
-              className={`btn ${activeTab === 'camera' ? 'btn-primary' : 'btn-secondary'}`}
+              type="button"
+              className={`scanner-tab-btn ${activeTab === 'camera' ? 'active' : ''}`}
               onClick={() => { stopCamera(); setActiveTab('camera'); setErrorBanner(''); }}
             >
-              <Camera size={18} /> Device Camera
+              <Camera size={18} /> Scan QR Code
             </button>
             <button 
-              className={`btn ${activeTab === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => { stopCamera(); setActiveTab('upload'); setErrorBanner(''); }}
-            >
-              <Upload size={18} /> Upload QR Image
-            </button>
-            <button 
-              className={`btn ${activeTab === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
+              type="button"
+              className={`scanner-tab-btn ${activeTab === 'paste' ? 'active' : ''}`}
               onClick={() => { stopCamera(); setActiveTab('paste'); setErrorBanner(''); }}
             >
               <Clipboard size={18} /> Direct Text / JSON
@@ -392,15 +779,15 @@ export default function Scanner() {
           {activeTab === 'camera' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', width: '100%' }}>
               {cameraState === 'IDLE' && (
-                <div style={{ textAlign: 'center', maxWidth: '440px' }}>
+                <div style={{ textAlign: 'center', maxWidth: '460px', width: '100%' }}>
                   <div className="placeholder-icon" style={{ margin: '0 auto 16px', width: '90px', height: '90px' }}>
                     <Camera size={44} className="text-blue" />
                   </div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--wallet-navy)' }}>
+                  <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--wallet-navy)' }}>
                     Ready to Scan QR Code
                   </h3>
-                  <p style={{ color: 'var(--wallet-text-secondary)', fontSize: '0.92rem', marginTop: '6px' }}>
-                    Camera access is requested only when you click start. Point your camera at any digitally signed QR code.
+                  <p style={{ color: 'var(--wallet-text-secondary)', fontSize: '0.92rem', marginTop: '6px', lineHeight: 1.5 }}>
+                    Scan live with your camera or select a downloaded QR code image from your device storage.
                   </p>
 
                   {camerasList.length > 1 && (
@@ -421,13 +808,68 @@ export default function Scanner() {
                     </div>
                   )}
 
-                  <button 
-                    className="btn btn-primary"
-                    style={{ marginTop: '20px', padding: '12px 28px', fontSize: '1rem' }}
-                    onClick={() => startCamera()}
-                  >
-                    <Camera size={20} /> Start Camera Scan
-                  </button>
+                  {/* Primary Scan Button + Prominent Downloaded QR Option */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', marginTop: '24px', width: '100%' }}>
+                    <button 
+                      className="btn btn-primary"
+                      style={{ width: '100%', maxWidth: '340px', padding: '14px 28px', fontSize: '1.02rem', gap: '10px' }}
+                      onClick={() => startCamera()}
+                    >
+                      <Camera size={20} /> Start Camera Scan
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '340px', margin: '4px 0' }}>
+                      <div style={{ flex: 1, height: '1px', background: 'var(--wallet-border)' }} />
+                      <span style={{ fontSize: '0.78rem', color: 'var(--wallet-text-secondary)', fontWeight: 700, letterSpacing: '0.05em' }}>OR FROM DEVICE</span>
+                      <div style={{ flex: 1, height: '1px', background: 'var(--wallet-border)' }} />
+                    </div>
+
+                    <button 
+                      type="button"
+                      className="btn-wallet btn-wallet-secondary"
+                      style={{ width: '100%', maxWidth: '340px', padding: '13px 20px', fontSize: '0.96rem', gap: '8px' }}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <FileUp size={19} /> Choose Downloaded QR from Device
+                    </button>
+                    
+                    <p style={{ fontSize: '0.8rem', color: 'var(--wallet-text-secondary)', margin: '4px 0 0', textAlign: 'center' }}>
+                      📁 Select from Downloads or drag & drop any QR image file onto this card (or press Ctrl + V)
+                    </p>
+                  </div>
+
+                  {/* Quick Sample / Demo QR Passes */}
+                  <div style={{ width: '100%', maxWidth: '720px', borderTop: '1px solid var(--wallet-border)', paddingTop: '20px', marginTop: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', justifyContent: 'center' }}>
+                      <Sparkles size={18} className="text-blue" />
+                      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--wallet-navy)', margin: 0 }}>
+                        Quick Test with Sample Passes
+                      </h4>
+                    </div>
+
+                    <div className="scanner-demo-grid">
+                      {demoVectors && demoVectors.map((demo) => (
+                        <div 
+                          key={demo.id} 
+                          className="scanner-demo-card"
+                          onClick={() => handleLoadDemoQr(demo)}
+                          title={`Click to test ${demo.title}`}
+                        >
+                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <ImageIcon size={18} className="text-blue" />
+                          </div>
+                          <div style={{ overflow: 'hidden', flex: 1, textAlign: 'left' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--wallet-navy)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {demo.title.replace(/^Demo \d+:\s*/, '')}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--wallet-text-secondary)' }}>
+                              {demo.expectedAuthenticity} • {demo.expectedThreat}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -442,13 +884,20 @@ export default function Scanner() {
                   <p style={{ color: 'var(--wallet-text-secondary)', fontSize: '0.9rem', marginTop: '8px', lineHeight: 1.5 }}>
                     {cameraError}
                   </p>
-                  <button 
-                    className="btn btn-primary"
-                    style={{ marginTop: '20px' }}
-                    onClick={() => startCamera()}
-                  >
-                    <RefreshCw size={18} /> Retry Permission
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px', flexWrap: 'wrap' }}>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => startCamera()}
+                    >
+                      <RefreshCw size={18} /> Retry Permission
+                    </button>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <FileUp size={18} /> Choose QR from Device
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -463,12 +912,12 @@ export default function Scanner() {
                   <p style={{ color: 'var(--wallet-text-secondary)', fontSize: '0.9rem', marginTop: '8px', lineHeight: 1.5 }}>
                     {cameraError}
                   </p>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px', flexWrap: 'wrap' }}>
                     <button className="btn btn-primary" onClick={() => startCamera()}>
-                      <RefreshCw size={18} /> Retry
+                      <RefreshCw size={18} /> Retry Camera
                     </button>
-                    <button className="btn btn-secondary" onClick={() => setActiveTab('upload')}>
-                      <Upload size={18} /> Upload Image Instead
+                    <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
+                      <FileUp size={18} /> Choose Downloaded QR
                     </button>
                   </div>
                 </div>
@@ -553,45 +1002,7 @@ export default function Scanner() {
             </div>
           )}
 
-          {/* TAB 2: Image Upload */}
-          {activeTab === 'upload' && (
-            <div style={{ padding: '24px 0', display: 'flex', justifyContent: 'center' }}>
-              <div 
-                style={{
-                  border: '2px dashed var(--wallet-border)',
-                  borderRadius: '16px',
-                  padding: '48px 24px',
-                  textAlign: 'center',
-                  maxWidth: '480px',
-                  width: '100%',
-                  cursor: 'pointer',
-                  backgroundColor: '#f8fafc',
-                  transition: 'border-color 0.2s ease'
-                }}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={handleFileUpload}
-                />
-                <div className="placeholder-icon" style={{ margin: '0 auto 16px', background: '#e8f0fe', color: 'var(--wallet-blue)' }}>
-                  <Upload size={36} />
-                </div>
-                <h3 style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--wallet-navy)' }}>
-                  Upload QR Image File
-                </h3>
-                <p style={{ color: 'var(--wallet-text-secondary)', fontSize: '0.88rem', marginTop: '6px' }}>
-                  Click to browse or drag & drop PNG, JPG, or SVG image (max 10 MB). Decoded locally in your browser.
-                </p>
-                <button className="btn btn-secondary" style={{ marginTop: '20px' }} type="button">
-                  Browse Device Storage
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {/* TAB 3: Direct Text / JSON */}
           {activeTab === 'paste' && (
@@ -653,13 +1064,21 @@ export default function Scanner() {
                     {scanResult.explanation}
                   </p>
                 </div>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ flexShrink: 0 }}
-                  onClick={resetToNewScan}
-                >
-                  <RefreshCw size={16} /> Scan Another
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+                  <button 
+                    className="btn" 
+                    style={{ background: '#ffffff', color: '#1e293b', border: '1.5px solid #cbd5e1' }}
+                    onClick={resetToNewScan}
+                  >
+                    <RefreshCw size={16} /> Scan Another
+                  </button>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => { resetToNewScan(); setTimeout(() => fileInputRef.current?.click(), 80); }}
+                  >
+                    <FileUp size={16} /> Choose Another QR File
+                  </button>
+                </div>
               </div>
             );
           })()}
@@ -684,8 +1103,8 @@ export default function Scanner() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fafc', borderRadius: '10px' }}>
                     <span style={{ fontSize: '0.85rem', color: 'var(--wallet-text-secondary)', fontWeight: 600 }}>Digital Signature:</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: scanResult.signatureValid ? 'var(--wallet-success)' : scanResult.code === 'UNSIGNED' ? 'var(--wallet-neutral)' : 'var(--wallet-danger)' }}>
-                      {scanResult.signatureValid ? '✓ Authenticated' : scanResult.code === 'UNSIGNED' ? 'None (Unsigned)' : '✗ Verification Failed'}
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: scanResult.signatureValid ? 'var(--wallet-success)' : scanResult.code === 'UNSIGNED' ? 'var(--wallet-neutral)' : scanResult.signerTrustStatus === 'KEY_NOT_FOUND' ? 'var(--wallet-warning)' : 'var(--wallet-danger)' }}>
+                      {scanResult.signatureValid ? '✓ Authenticated' : scanResult.code === 'UNSIGNED' ? 'None (Unsigned)' : scanResult.signerTrustStatus === 'KEY_NOT_FOUND' ? '❓ Unverified (Key Not in Keystore)' : '✗ Verification Failed (Tampered)'}
                     </span>
                   </div>
 

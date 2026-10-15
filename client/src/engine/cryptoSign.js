@@ -191,25 +191,65 @@ export async function verifySignature(publicKey, signedPayload) {
 
   try {
     const cryptoObj = getCrypto();
-    const canonicalString = buildCanonicalDataString(signedPayload);
     const enc = new TextEncoder();
-    const canonicalBytes = enc.encode(canonicalString);
     const signatureBytes = base64ToBytes(sig);
 
     if (signatureBytes.length === 0) {
       return { isValid: false, reason: 'Corrupted or invalid Base64 signature.' };
     }
 
-    const isValid = await cryptoObj.subtle.verify(
-      { name: 'ECDSA', hash: { name: 'SHA-256' } },
-      publicKey,
-      signatureBytes,
-      canonicalBytes
-    );
+    // 1. Try standard QDCF-v1 canonical format
+    let isQdcfValid = false;
+    try {
+      const canonicalString = buildCanonicalDataString(signedPayload);
+      const canonicalBytes = enc.encode(canonicalString);
+      isQdcfValid = await cryptoObj.subtle.verify(
+        { name: 'ECDSA', hash: { name: 'SHA-256' } },
+        publicKey,
+        signatureBytes,
+        canonicalBytes
+      );
+    } catch {
+      // Continue to try pipe-delimited format
+    }
+
+    if (isQdcfValid) {
+      return {
+        isValid: true,
+        reason: 'Signature mathematically valid and verified (QDCF-v1).'
+      };
+    }
+
+    // 2. Try Stage 1 pipe-delimited canonical format: v{v}|{iss}|{kid}|{iat}|{exp}|{type}|{data}
+    if (signedPayload.iss || signedPayload.data) {
+      const v = signedPayload.v || 1;
+      const iss = signedPayload.iss || signedPayload.name || '';
+      const kid = signedPayload.kid || '';
+      const iat = signedPayload.iat || 0;
+      const exp = signedPayload.exp || 0;
+      const type = signedPayload.type || signedPayload.contentType || 'url';
+      const data = signedPayload.data || signedPayload.content || '';
+      const pipeCanonical = `v${v}|${iss}|${kid}|${iat}|${exp}|${type}|${data}`;
+      const pipeBytes = enc.encode(pipeCanonical);
+
+      const isPipeValid = await cryptoObj.subtle.verify(
+        { name: 'ECDSA', hash: { name: 'SHA-256' } },
+        publicKey,
+        signatureBytes,
+        pipeBytes
+      );
+
+      if (isPipeValid) {
+        return {
+          isValid: true,
+          reason: 'Signature mathematically valid and verified (Stage 1 Canonical).'
+        };
+      }
+    }
 
     return {
-      isValid,
-      reason: isValid ? 'Signature mathematically valid and verified.' : 'Signature mismatch: Payload content or metadata has been altered.'
+      isValid: false,
+      reason: 'Signature mismatch: Payload content or metadata has been altered.'
     };
   } catch (err) {
     return { isValid: false, reason: `Verification error: ${err.message}` };

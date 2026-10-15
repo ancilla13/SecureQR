@@ -17,7 +17,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.4"
+    "react-router-dom": "^7.18.4",
+    "secureqr-root": "file:.."
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

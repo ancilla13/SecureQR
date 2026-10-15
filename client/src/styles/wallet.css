@@ -434,3 +434,109 @@ body {
   z-index: 5;
 }
 
+/* Wallet Card High-Contrast Button Overrides */
+.wallet-card .btn-secondary {
+  background: #f1f5f9;
+  color: #334155 !important;
+  border: 1.5px solid #cbd5e1;
+}
+
+.wallet-card .btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a !important;
+  border-color: #94a3b8;
+}
+
+/* Scanner Segmented Tab Navigation */
+.scanner-tab-bar {
+  display: flex;
+  gap: 8px;
+  background: #f1f5f9;
+  padding: 6px;
+  border-radius: 14px;
+  margin-bottom: 24px;
+  border: 1px solid var(--wallet-border);
+}
+
+.scanner-tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #475569 !important;
+  transition: all 0.2s ease;
+}
+
+.scanner-tab-btn:hover {
+  color: #0f172a !important;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.scanner-tab-btn.active {
+  background: linear-gradient(135deg, #7c3aed, #3b82f6) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+}
+
+/* Dropzone & File Pickers */
+.scanner-dropzone {
+  border: 2px dashed #93c5fd;
+  border-radius: 18px;
+  padding: 44px 24px;
+  text-align: center;
+  width: 100%;
+  max-width: 540px;
+  cursor: pointer;
+  background-color: #f8fafc;
+  transition: all 0.25s ease;
+  position: relative;
+}
+
+.scanner-dropzone:hover {
+  border-color: var(--wallet-blue);
+  background-color: #f0f7ff;
+}
+
+.scanner-dropzone.drag-active {
+  border-color: #7c3aed;
+  background-color: #f5f3ff;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.15);
+  transform: scale(1.01);
+}
+
+.scanner-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.scanner-demo-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1.5px solid var(--wallet-border);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.scanner-demo-card:hover {
+  border-color: var(--wallet-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 41, 112, 0.08);
+}
+
+
