@@ -1,4 +1,4 @@
-# SecureQR — Cryptographic & AI-Driven QR Verification System
+# SecureQR: Cryptographic & AI-Driven QR Verification System
 
 > **"Scan anything. Trust nothing blindly."**  
 > *A Production-Grade Cryptography & AI Security Platform for Project-Based Learning (PBL).*
@@ -199,20 +199,6 @@ npm run client
 
 Total: 50 passed across 5 test files
 ```
-
----
-
-## 🎤 Viva & Project Defense Cheat Sheet
-
-| Question | Winning Technical Answer |
-|---|---|
-| **"Why don't you use RSA?"** | *"ECDSA P-256 provides 128-bit security equivalent to RSA-3072 with a fraction of the key size (64 bytes vs 384 bytes). In QR codes, data density directly determines scanning distance and camera readability — ECDSA keeps the QR small, fast, and easy to scan."* |
-| **"How does LAN Chat prevent Man-in-the-Middle (MITM) attacks?"** | *"1. Ephemeral ECDH keys are digitally signed with the sender's persistent ECDSA private key to prevent spoofing.<br>2. Derived session keys generate a 6-digit visual Short Authentication String (SAS). If an attacker sits in the middle, the derived HKDF keys on Alice's and Bob's screens will be mathematically different, exposing the attack immediately."* |
-| **"Does the WebSocket server have access to message contents?"** | *"No. The relay server is strictly zero-knowledge. It only receives and routes JSON envelopes containing AES-256-GCM Base64 ciphertext, a 96-bit random IV, and a 128-bit GMAC authentication tag. The server has no private keys and cannot derive session keys."* |
-| **"Why combine an AI classifier with heuristics?"** | *"Heuristics instantly catch known structural deceptions (raw IP hosts, Punycode lookalikes, credential keywords) with zero latency and zero false positives on known rules. The pretrained ONNX model catches novel patterns through statistical lexical feature distribution. Combining both gives defense-in-depth."* |
-| **"Why keep Cryptographic Verification separate from AI Threat Status?"** | *"Because authenticity and safety answer different questions. A legitimate company could be compromised and point to a malicious endpoint, while a benign personal website might not be digitally signed. Collapsing them into a single score hides critical security context from the user."* |
-
----
 
 ## 📄 License
 Academic & Educational Use Only • Built for Project-Based Learning (PBL) in Cryptography & Cybersecurity.
