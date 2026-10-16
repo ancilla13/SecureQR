@@ -38,7 +38,16 @@ function saveRegistry(data) {
 // Middleware to authenticate administrative actions
 function requireAdminAuth(req, res, next) {
   const adminKey = req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
-  const expectedSecret = process.env.ADMIN_SECRET || 'secureqr-demo-admin-key-2026';
+  const expectedSecret = process.env.ADMIN_SECRET;
+
+  // Registry writes must never silently fall back to a public, source-known
+  // credential. Keep read-only verification available when admin management
+  // has deliberately not been configured.
+  if (!expectedSecret) {
+    return res.status(503).json({
+      error: 'Issuer registry administration is disabled: ADMIN_SECRET is not configured.'
+    });
+  }
   
   if (!adminKey || adminKey !== expectedSecret) {
     return res.status(401).json({

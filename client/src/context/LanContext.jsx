@@ -18,6 +18,16 @@ import {
 } from '../engine/lanCrypto.js';
 
 const LanContext = createContext(null);
+const MAX_CHAT_IMAGE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_CHAT_IMAGE_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,'];
+
+function isSafeChatImage(dataUrl) {
+  if (typeof dataUrl !== 'string' || !ALLOWED_CHAT_IMAGE_PREFIXES.some(prefix => dataUrl.startsWith(prefix))) {
+    return false;
+  }
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  return base64.length <= Math.ceil(MAX_CHAT_IMAGE_BYTES * 4 / 3);
+}
 
 export function LanProvider({ children }) {
   const location = useLocation();
@@ -37,7 +47,7 @@ export function LanProvider({ children }) {
   const [roomId, setRoomId] = useState('secureqr-lan-room');
   const [connectionStatus, setConnectionStatus] = useState('disconnected'); // 'disconnected' | 'connecting' | 'connected'
   const [connError, setConnError] = useState('');
-  const [peers, setPeers] = useState({}); // peerId -> { name, kid, signingKeyJWK, ecdhPubJWK, sessionKey, securityCode, handshakeStatus, trustStatus }
+  const [peers, setPeers] = useState({}); // peerId -> { name, kid, signingKeyJWK, ecdhPubJWK, sessionKey, securityCode, handshakeStatus, trustStatus, sasVerified }
   const [activePeerId, setActivePeerId] = useState(null);
 
   // Messages & chat state
@@ -352,7 +362,8 @@ export function LanProvider({ children }) {
           sessionKey,
           securityCode,
           handshakeStatus: 'established',
-          trustStatus
+          trustStatus,
+          sasVerified: trustStatus === 'TRUSTED'
         }
       }));
 
@@ -404,7 +415,8 @@ export function LanProvider({ children }) {
           sessionKey,
           securityCode,
           handshakeStatus: 'established',
-          trustStatus
+          trustStatus,
+          sasVerified: trustStatus === 'TRUSTED'
         }
       }));
 
@@ -436,12 +448,12 @@ export function LanProvider({ children }) {
         try {
           if (decryptedText.startsWith('{"type":"image"') || decryptedText.startsWith('{"type":"media"')) {
             const parsed = JSON.parse(decryptedText);
-            if (parsed.type === 'image' && parsed.dataUrl) {
+            if (parsed.type === 'image' && isSafeChatImage(parsed.dataUrl)) {
               isImage = true;
               imageData = parsed;
               displayText = parsed.caption || '';
             }
-          } else if (decryptedText.startsWith('data:image/')) {
+          } else if (isSafeChatImage(decryptedText)) {
             isImage = true;
             imageData = { type: 'image', dataUrl: decryptedText, caption: '' };
             displayText = '';
@@ -539,8 +551,8 @@ export function LanProvider({ children }) {
     if (!inputText.trim() || !currentActivePeerId) return;
 
     const peer = peersRef.current[currentActivePeerId];
-    if (!peer || peer.handshakeStatus !== 'established' || !peer.sessionKey) {
-      alert('Secure E2EE handshake is not established with this peer yet.');
+    if (!peer || peer.handshakeStatus !== 'established' || !peer.sessionKey || !peer.sasVerified) {
+      alert('Confirm the matching security code with this peer before sending messages.');
       return;
     }
 
@@ -582,10 +594,14 @@ export function LanProvider({ children }) {
   const handleSendImage = async (dataUrl, caption = '', fileName = 'image.png') => {
     const currentActivePeerId = activePeerIdRef.current || activePeerId;
     if (!dataUrl || !currentActivePeerId) return;
+    if (!isSafeChatImage(dataUrl)) {
+      alert('Image rejected: use a PNG, JPEG, or WebP attachment no larger than 2 MB.');
+      return;
+    }
 
     const peer = peersRef.current[currentActivePeerId];
-    if (!peer || peer.handshakeStatus !== 'established' || !peer.sessionKey) {
-      alert('Secure E2EE handshake is not established with this peer yet.');
+    if (!peer || peer.handshakeStatus !== 'established' || !peer.sessionKey || !peer.sasVerified) {
+      alert('Confirm the matching security code with this peer before sending attachments.');
       return;
     }
 
@@ -675,6 +691,14 @@ export function LanProvider({ children }) {
     } catch (err) {
       console.error('Failed to share public key:', err);
     }
+  };
+
+  const confirmPeerSecurityCode = (peerId) => {
+    updatePeersState(prev => {
+      const peer = prev[peerId];
+      if (!peer || peer.handshakeStatus !== 'established') return prev;
+      return { ...prev, [peerId]: { ...peer, sasVerified: true } };
+    });
   };
 
   // One-click save peer's shared public key into Trusted Contacts keystore
@@ -772,6 +796,7 @@ export function LanProvider({ children }) {
     initiateHandshakeWithPeer,
     handleSendMessage,
     handleSendImage,
+    confirmPeerSecurityCode,
     handleShareMyPublicKey,
     handleSaveContactFromChat,
     handleGenerateFreshIdentity,

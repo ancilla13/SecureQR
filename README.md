@@ -3,7 +3,7 @@
 > **"Scan anything. Trust nothing blindly."**  
 > *A Production-Grade Cryptography & AI Security Platform for Project-Based Learning (PBL).*
 
-SecureQR is a modern, privacy-first QR verification and key exchange platform designed to defeat **Quishing (QR phishing)**, **physical sticker overlays**, **altered payloads**, and **MITM attacks**.
+SecureQR is a modern, privacy-first QR verification and key exchange platform designed to detect **Quishing (QR phishing)**, **altered payloads**, and **MITM attempts**. Physical sticker-overlay detection requires camera/computer-vision evidence and is not currently guaranteed by cryptographic verification alone.
 
 It decouples verification into **three independent trust layers** and features an **authenticated end-to-end encrypted (E2EE) LAN chat application** for out-of-band cryptographic public key exchange.
 
@@ -35,7 +35,7 @@ It decouples verification into **three independent trust layers** and features a
 2. **Layer 2: Cryptographic Authenticity (ECDSA P-256)**  
    Verifies digital signatures against the local **Trusted Contacts Keystore** in IndexedDB using strict **QDCF-v1** canonical serialization. Detects altered bytes or expired passes.
 3. **Layer 3: Threat Intelligence (Pretrained AI + Heuristics)**  
-   - **Pretrained AI Classifier:** Runs `pirocheto/phishing-url-detection` using **ONNX Runtime Node** on the backend (`POST /api/threat/classify`).
+   - **Pretrained AI Classifier:** Runs `pirocheto/phishing-url-detection` using **ONNX Runtime Node** on the local backend (`POST /api/threat/classify`). A deployed backend receives the scanned URL for classification; it is not browser-only inference.
    - **Deterministic Heuristics:** Client-side detection of raw IP hostnames, Punycode homograph attacks (`xn--...`), excessive subdomains, and credential-harvesting keywords.
    - **Independent Separation:** A valid signature never suppresses a phishing warning, and an unsigned status never labels a link malicious.
 

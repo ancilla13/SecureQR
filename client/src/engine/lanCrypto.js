@@ -111,13 +111,23 @@ export async function verifyHandshakePacket(packet, peerSigningKeyJWK) {
     return { isValid: false, error: 'Cryptographic signature mismatch on ECDH handshake.' };
   }
 
-  let handshakeData = packet.handshakeData;
-  if (!handshakeData) {
-    try {
-      handshakeData = JSON.parse(packet.content);
-    } catch {
-      return { isValid: false, error: 'Malformed handshake payload.' };
-    }
+  // `content` is the signed representation. Never consume the convenience
+  // `handshakeData` field here: a relay could replace that duplicate field
+  // without invalidating the signature and substitute its own ECDH key.
+  let handshakeData;
+  try {
+    handshakeData = JSON.parse(packet.content);
+  } catch {
+    return { isValid: false, error: 'Malformed handshake payload.' };
+  }
+
+  if (
+    handshakeData?.type !== 'ecdh_handshake' ||
+    !isP256PublicJwk(handshakeData.ecdhPubJWK) ||
+    typeof handshakeData.nonce !== 'string' ||
+    !handshakeData.nonce
+  ) {
+    return { isValid: false, error: 'Invalid signed ECDH handshake data.' };
   }
 
   return { isValid: true, peerEcdhPubJWK: handshakeData.ecdhPubJWK };
@@ -309,13 +319,17 @@ export async function verifyPublicKeyAnnouncement(announcement) {
     return { isValid: false, error: 'Malformed public key announcement structure.' };
   }
 
-  let data = announcement.announcementData;
-  if (!data) {
-    try {
-      data = JSON.parse(announcement.content);
-    } catch {
-      return { isValid: false, error: 'Malformed announcement content.' };
-    }
+  // The signed content is authoritative. announcementData is display-only
+  // metadata and must not influence trust decisions.
+  let data;
+  try {
+    data = JSON.parse(announcement.content);
+  } catch {
+    return { isValid: false, error: 'Malformed announcement content.' };
+  }
+
+  if (data?.type !== 'public_key_announcement') {
+    return { isValid: false, error: 'Invalid public key announcement type.' };
   }
 
   const val = validatePublicKeyJWK(data.publicKeyJWK);
@@ -346,4 +360,14 @@ export async function verifyPublicKeyAnnouncement(announcement) {
       publicKeyJWK: data.publicKeyJWK
     }
   };
+}
+
+function isP256PublicJwk(jwk) {
+  return Boolean(
+    jwk &&
+    jwk.kty === 'EC' &&
+    jwk.crv === 'P-256' &&
+    typeof jwk.x === 'string' && jwk.x.length > 0 &&
+    typeof jwk.y === 'string' && jwk.y.length > 0
+  );
 }

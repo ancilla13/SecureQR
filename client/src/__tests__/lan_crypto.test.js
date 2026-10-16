@@ -40,6 +40,17 @@ describe('Secure LAN Cryptographic Protocol (ECDH + HKDF + AES-256-GCM)', () => 
     const tampered = { ...packet, content: packet.content.replace('ecdh', 'tampered_ecdh') };
     const tamperedCheck = await verifyHandshakePacket(tampered, identity.publicKey);
     expect(tamperedCheck.isValid).toBe(false);
+
+    // A relay must not be able to replace an unsigned convenience copy of the
+    // signed ECDH key. The verifier must always parse packet.content.
+    const attackerEcdh = await generateEcdhKeyPair();
+    const duplicateFieldTampered = {
+      ...packet,
+      handshakeData: { ...packet.handshakeData, ecdhPubJWK: attackerEcdh.publicJWK }
+    };
+    const duplicateCheck = await verifyHandshakePacket(duplicateFieldTampered, identity.publicKey);
+    expect(duplicateCheck.isValid).toBe(true);
+    expect(duplicateCheck.peerEcdhPubJWK.x).toBe(aliceEcdh.publicJWK.x);
   });
 
   it('derives matching AES-256-GCM session keys and matching security codes on both peers', async () => {
@@ -115,6 +126,15 @@ describe('Secure LAN Cryptographic Protocol (ECDH + HKDF + AES-256-GCM)', () => 
     expect(verifyResult.isValid).toBe(true);
     expect(verifyResult.contact.name).toBe('Alice Researcher');
     expect(verifyResult.contact.fingerprint).toBe(identity.fingerprint);
+
+    // Display metadata outside the signed content must not relabel a key.
+    const relabelled = {
+      ...announcement,
+      announcementData: { ...announcement.announcementData, name: 'Attacker' }
+    };
+    const relabelledResult = await verifyPublicKeyAnnouncement(relabelled);
+    expect(relabelledResult.isValid).toBe(true);
+    expect(relabelledResult.contact.name).toBe('Alice Researcher');
 
     // Save into Bob's contacts store
     await saveContact({

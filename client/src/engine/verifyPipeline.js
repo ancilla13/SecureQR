@@ -128,7 +128,11 @@ export function parseScannedText(rawText) {
             exp: parsed.exp !== null && parsed.exp !== undefined ? Number(parsed.exp) : null,
             contentType: String(parsed.contentType || parsed.type || detectContentType(String(contentVal))),
             content: String(contentVal),
-            sig: String(sig)
+            sig: String(sig),
+            // Optional portable verification key. It permits mathematical
+            // signature verification on a different browser/device, but is
+            // never treated as trusted until its fingerprint is confirmed.
+            publicKeyJWK: parsed.publicKeyJWK || parsed.publicKey || null
           },
           rawText: trimmed
         };
@@ -284,6 +288,16 @@ export async function verifyScannedPayload(rawText, options = {}) {
           }
         } catch {
           // ignore
+        }
+      }
+
+      // 3. New SecureQR codes can include the signer's public JWK. This is a
+      // portability aid only: a self-contained key proves integrity but does
+      // not establish the sender's real-world identity or trust.
+      if (!keyJWKToUse && payload.publicKeyJWK) {
+        const embeddedKeyValidation = validatePublicKeyJWK(payload.publicKeyJWK);
+        if (embeddedKeyValidation.isValid) {
+          keyJWKToUse = payload.publicKeyJWK;
         }
       }
     }

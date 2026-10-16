@@ -145,13 +145,27 @@ export default function CreateSign() {
       else if (expiryOption === '30d') expTimestamp = now + (30 * 86400);
 
       // 1. Digitally sign the canonical payload using ECDSA P-256
-      const payload = await signPayload(activeKeyPair.privateKey, {
+      const signedPayload = await signPayload(activeKeyPair.privateKey, {
         content: content.trim(),
         contentType,
         kid: identity.kid,
         name: aliasInput.trim() || identity.alias,
         exp: expTimestamp
       });
+
+      // Include only the public portion so a QR can be mathematically
+      // verified on another device/browser. This does not grant trust: the
+      // receiver must still confirm the displayed fingerprint out of band.
+      const payload = {
+        ...signedPayload,
+        publicKeyJWK: {
+          kty: 'EC',
+          crv: 'P-256',
+          x: identity.publicKey.x,
+          y: identity.publicKey.y,
+          kid: identity.kid
+        }
+      };
 
       setSignedPayload(payload);
 

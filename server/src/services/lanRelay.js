@@ -12,7 +12,14 @@ import { WebSocketServer, WebSocket } from 'ws';
 const rooms = new Map();
 
 export function setupLanRelay(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  // Image payloads are encrypted and Base64 encoded in the browser. Four MB
+  // supports the two MB client attachment cap while preventing one peer from
+  // exhausting relay memory with arbitrarily large frames.
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/ws',
+    maxPayload: 4 * 1024 * 1024
+  });
 
   wss.on('connection', (ws, req) => {
     let currentRoomId = null;

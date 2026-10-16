@@ -211,22 +211,6 @@ export default function Scanner() {
         }
       }
 
-      // 3. Check if a URL was dragged (e.g. from Chrome download popup, another tab, or image link)
-      if (!file && e.dataTransfer) {
-        const url = e.dataTransfer.getData('URL') || e.dataTransfer.getData('text/uri-list');
-        if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:'))) {
-          try {
-            setIsProcessing(true);
-            setProcessingStatus('Fetching dropped QR image...');
-            const res = await fetch(url);
-            const blob = await res.blob();
-            file = new File([blob], 'downloaded_qr.png', { type: blob.type || 'image/png' });
-          } catch (urlErr) {
-            console.warn('Could not fetch dragged URL:', urlErr);
-          }
-        }
-      }
-
       if (file) {
         if (processQrFileRef.current) {
           await processQrFileRef.current(file);
@@ -234,7 +218,8 @@ export default function Scanner() {
         return;
       }
 
-      // 4. Check if direct text / JSON was dropped
+      // Check direct text / JSON. Deliberately do not fetch dropped URLs:
+      // scanning must not cause an untrusted network request.
       if (e.dataTransfer) {
         const text = e.dataTransfer.getData('text/plain');
         if (text && text.trim() && handleProcessScannedTextRef.current) {
@@ -481,10 +466,12 @@ export default function Scanner() {
       await handleProcessScannedText(decodedText);
     } catch (err) {
       console.error('Image scan failure:', err);
-      // Fallback: check if raw file has text content (e.g. extensionless JSON file)
+      // Fallback only for declared text/JSON files. Reading binary image bytes
+      // as text can accidentally turn a failed QR decode into a fake payload.
       try {
-        const fallbackText = await rawFile.text();
-        if (fallbackText && fallbackText.trim().length > 10 && (fallbackText.includes('{') || fallbackText.includes('payload') || fallbackText.includes('.'))) {
+        const isTextOrJson = rawFile.type === 'application/json' || rawFile.type === 'text/plain' || /\.(json|txt)$/i.test(rawFile.name);
+        const fallbackText = isTextOrJson ? await rawFile.text() : '';
+        if (fallbackText && fallbackText.trim().length > 10) {
           await handleProcessScannedText(fallbackText.trim());
           return;
         }

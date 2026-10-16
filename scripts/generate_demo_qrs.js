@@ -140,7 +140,14 @@ async function main() {
   const demo5Raw = JSON.stringify(demo5Payload);
 
   // 5. Render PNG QR Codes
-  const qrOptions = { width: 400, margin: 2, color: { dark: '#0b132b', light: '#ffffff' } };
+  // Signed JSON payloads are dense. A larger raster and generous quiet zone
+  // preserve detector reliability without forcing a denser QR version.
+  const qrOptions = {
+    width: 800,
+    margin: 4,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#0b132b', light: '#ffffff' }
+  };
 
   await QRCode.toFile(path.join(DEMO_QRS_DIR, 'demo1_unsigned.png'), demo1Raw, qrOptions);
   await QRCode.toFile(path.join(DEMO_QRS_DIR, 'demo2_verified.png'), demo2Raw, qrOptions);

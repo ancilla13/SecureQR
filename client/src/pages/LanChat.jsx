@@ -33,6 +33,7 @@ export default function LanChat() {
     initiateHandshakeWithPeer,
     handleSendMessage,
     handleSendImage,
+    confirmPeerSecurityCode,
     handleShareMyPublicKey,
     handleSaveContactFromChat,
     handleGenerateFreshIdentity,
@@ -51,16 +52,19 @@ export default function LanChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedImage]);
 
-  // Read image file into DataURL and stage it
+  const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+  // Read a raster image into a Data URL. SVG is intentionally excluded: it is
+  // an active document format, not a safe chat attachment format.
   const processImageFile = (file) => {
     if (!file) return;
-    if (!file.type || !file.type.startsWith('image/')) {
-      alert('Selected file is not an image. Please choose a PNG, JPG, WebP, or SVG file.');
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      alert('Unsupported image type. Please choose a PNG, JPEG, or WebP image.');
       return;
     }
-    // Max 15MB
-    if (file.size > 15 * 1024 * 1024) {
-      alert('Image file is too large (max 15MB).');
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert('Image file is too large (max 2 MB).');
       return;
     }
 
@@ -175,14 +179,14 @@ export default function LanChat() {
           <span className="page-index-label">/04 RELAY</span>
           <h1 className="page-editorial-title">LAN RELAY &amp; KEY EXCHANGE</h1>
           <p className="page-editorial-desc">
-            Peer-to-peer end-to-end encrypted messaging via ECDH P-256 + HKDF + AES-256-GCM.
+            End-to-end encrypted local-network messaging via an authenticated relay, using ECDH P-256 + HKDF + AES-256-GCM.
             Share public keys over your local network and verify SHA-256 fingerprints directly.
           </p>
         </div>
         <div className="editorial-header-right">
           <div className="badge-lime">
             <span className="pulse-dot dot-lime" />
-            <span>P2P RELAY ENCRYPTED</span>
+            <span>E2EE RELAY ENCRYPTED</span>
           </div>
           <div className="technical-coordinates">
             ECDH // AES-256-GCM TUNNEL
@@ -390,7 +394,7 @@ export default function LanChat() {
                   DROP IMAGE TO STAGE FOR ENCRYPTION
                 </span>
                 <span style={{ fontSize: '0.75rem', color: '#A0A0A5', fontFamily: 'var(--font-mono)' }}>
-                  PNG, JPG, WebP, GIF, SVG (up to 15 MB) • Encrypted via AES-256-GCM
+                  PNG, JPEG, WebP (up to 2 MB) • Encrypted via AES-256-GCM
                 </span>
               </div>
             </div>
@@ -415,6 +419,7 @@ export default function LanChat() {
                   {activePeer.securityCode && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--wallet-text-secondary)', marginTop: '2px' }}>
                       Security Verification Code: <strong style={{ color: 'var(--wallet-navy)', letterSpacing: '1px' }}>{activePeer.securityCode}</strong>
+                      {!activePeer.sasVerified && ' — compare this code with your peer before enabling chat.'}
                     </div>
                   )}
                 </div>
@@ -432,10 +437,20 @@ export default function LanChat() {
                   className="btn btn-secondary" 
                   style={{ padding: '6px 12px', fontSize: '0.82rem' }}
                   onClick={handleShareMyPublicKey}
-                  disabled={activePeer.handshakeStatus !== 'established'}
+                  disabled={activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
                 >
                   <Key size={14} /> Share My Public Key
                 </button>
+                {activePeer.handshakeStatus === 'established' && !activePeer.sasVerified && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+                    onClick={() => confirmPeerSecurityCode(activePeer.peerId)}
+                    title="Only confirm after comparing the six-digit code out of band"
+                  >
+                    <CheckCircle2 size={14} /> I Compared the Code
+                  </button>
+                )}
                 {activePeer.handshakeStatus === 'established' && (
                   <button 
                     className="btn btn-secondary" 
@@ -708,7 +723,7 @@ export default function LanChat() {
           <input 
             type="file" 
             ref={imageInputRef} 
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             style={{ display: 'none' }}
             onChange={handleImageFileChange}
           />
@@ -738,7 +753,7 @@ export default function LanChat() {
                 className="btn btn-secondary"
                 style={{ padding: '12px 14px' }}
                 onClick={() => imageInputRef.current?.click()}
-                disabled={!activePeer || activePeer.handshakeStatus !== 'established'}
+                disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
                 title="Attach Image or QR Code"
               >
                 <ImageIcon size={18} />
@@ -752,14 +767,14 @@ export default function LanChat() {
                     : (activePeer ? `Encrypted message to ${activePeer.name}...` : 'Select a peer to start typing...')
                 }
                 value={inputText}
-                disabled={!activePeer || activePeer.handshakeStatus !== 'established'}
+                disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
                 onChange={(e) => setInputText(e.target.value)}
                 style={{ flex: 1 }}
               />
               <button 
                 type="submit" 
                 className="btn btn-primary"
-                disabled={(!inputText.trim() && !selectedImage) || !activePeer || activePeer.handshakeStatus !== 'established'}
+                disabled={(!inputText.trim() && !selectedImage) || !activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
               >
                 <Send size={16} /> Send
               </button>

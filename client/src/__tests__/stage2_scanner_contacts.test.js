@@ -189,6 +189,30 @@ describe('Stage 2: Complete 7-State Verification Pipeline', () => {
     expect(result.signerTrustStatus).toBe('UNKNOWN');
   });
 
+  it('verifies a portable QR with an embedded public key as unknown, never trusted', async () => {
+    const remoteKeyPair = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify']
+    );
+    const remotePublicJWK = await crypto.subtle.exportKey('jwk', remoteKeyPair.publicKey);
+    remotePublicJWK.kid = 'portable_remote_key';
+
+    const payload = await signPayload(remoteKeyPair.privateKey, {
+      content: 'Portable signed notice',
+      contentType: 'text',
+      kid: remotePublicJWK.kid,
+      name: 'Remote Signer',
+      exp: null
+    });
+    payload.publicKeyJWK = remotePublicJWK;
+
+    const result = await verifyScannedPayload(JSON.stringify(payload));
+    expect(result.code).toBe('VALID_UNKNOWN_KEY');
+    expect(result.signatureValid).toBe(true);
+    expect(result.signerTrustStatus).toBe('UNKNOWN');
+  });
+
   it('State 3: VALID_IMPORTED_UNCONFIRMED (Signed with key imported but unconfirmed)', async () => {
     // Save contact as unconfirmed
     await saveContact({
