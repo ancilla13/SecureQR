@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { 
   Key, QrCode, Download, Copy, Check, RefreshCw, 
-  ShieldCheck, Clock, User, FileText, Globe, CheckCircle2, AlertCircle,
+  ShieldCheck, Clock, FileText, Globe, CheckCircle2, AlertCircle,
   Image as ImageIcon, Upload, X
 } from 'lucide-react';
 import { 

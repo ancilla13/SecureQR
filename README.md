@@ -35,7 +35,7 @@ It decouples verification into **three independent trust layers** and features a
 2. **Layer 2: Cryptographic Authenticity (ECDSA P-256)**  
    Verifies digital signatures against the local **Trusted Contacts Keystore** in IndexedDB using strict **QDCF-v1** canonical serialization. Detects altered bytes or expired passes.
 3. **Layer 3: Threat Intelligence (Pretrained AI + Heuristics)**  
-   - **Pretrained AI Classifier:** Runs `pirocheto/phishing-url-detection` using **ONNX Runtime Node** on the backend (`POST /api/threat/classify-url`).
+   - **Pretrained AI Classifier:** Runs `pirocheto/phishing-url-detection` using **ONNX Runtime Node** on the backend (`POST /api/threat/classify`).
    - **Deterministic Heuristics:** Client-side detection of raw IP hostnames, Punycode homograph attacks (`xn--...`), excessive subdomains, and credential-harvesting keywords.
    - **Independent Separation:** A valid signature never suppresses a phishing warning, and an unsigned status never labels a link malicious.
 
@@ -108,7 +108,7 @@ PBL-Crypto/
 │   │   └── model.onnx                 # Pretrained ONNX Phishing Classifier (pirocheto)
 │   ├── src/
 │   │   ├── routes/
-│   │   │   └── threat.js              # POST /api/threat/classify-url & GET /info
+│   │   │   └── threat.js              # POST /api/threat/classify & GET /info
 │   │   ├── services/
 │   │   │   ├── lanRelay.js            # Zero-knowledge WebSocket room relay (/ws)
 │   │   │   └── phishingClassifier.js  # ONNX Runtime feature extraction & inference

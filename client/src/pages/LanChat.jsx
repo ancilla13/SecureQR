@@ -4,7 +4,7 @@ import {
   Radio, Lock, ShieldCheck, ShieldAlert, Key, Send, 
   Users, Check, Copy, RefreshCw, Eye, X, AlertTriangle,
   CheckCircle2, ArrowRight, UserPlus, Info, XCircle,
-  Image as ImageIcon, Paperclip, Download, Maximize2, Shield, QrCode
+  Image as ImageIcon, Download, Maximize2, QrCode
 } from 'lucide-react';
 import { useLan } from '../context/LanContext.jsx';
 import '../styles/wallet.css';

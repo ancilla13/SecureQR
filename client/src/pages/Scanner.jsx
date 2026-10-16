@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { 
-  Camera, Upload, Clipboard, ShieldCheck, ShieldAlert, AlertTriangle, 
+  Camera, Clipboard, ShieldCheck, ShieldAlert, AlertTriangle, 
   HelpCircle, RefreshCw, Copy, Check, ExternalLink, Globe, FileText, 
-  Lock, X, ShieldQuestion, UserPlus, Info, CheckCircle2, ChevronRight,
-  FileUp, Image as ImageIcon, Sparkles, FolderOpen, Download
+  Lock, X, ShieldQuestion, CheckCircle2,
+  FileUp, Image as ImageIcon, Sparkles
 } from 'lucide-react';
-import { verifyScannedPayload, VERIFICATION_OUTCOMES } from '../engine/verifyPipeline.js';
-import { saveContact, setContactTrustStatus, getAllContacts } from '../engine/keystore.js';
+import { verifyScannedPayload } from '../engine/verifyPipeline.js';
 import demoVectors from '../data/demoVectors.json';
 import '../styles/wallet.css';
 

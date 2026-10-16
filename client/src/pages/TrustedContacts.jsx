@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, ShieldCheck, ShieldAlert, AlertTriangle, 
   Trash2, Download, Copy, Check, Eye, X, Upload, CheckCircle2,
-  Lock, RefreshCw, Key, ExternalLink, ShieldQuestion
+  Lock, RefreshCw, Key, ShieldQuestion
 } from 'lucide-react';
 import { 
   getAllContacts, 
