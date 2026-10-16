@@ -306,7 +306,15 @@ export default function LanChat() {
                 {connectionStatus === 'connected' ? (
                   <>
                     <p style={{ margin: 0 }}>Waiting for peers in room <strong>{roomId}</strong>...</p>
-                    <p style={{ fontSize: '0.78rem', marginTop: '6px' }}>Open SecureQR in another tab or device on your network to connect.</p>
+                    <p style={{ fontSize: '0.78rem', marginTop: '6px' }}>
+                      Open SecureQR on another device or browser tab to connect.
+                    </p>
+                    <div style={{ marginTop: '12px', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--wallet-border)', textAlign: 'left', fontSize: '0.75rem' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--wallet-navy)', marginBottom: '4px' }}>To connect another device:</div>
+                      <div>1. Open <code>{typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173/lan` : 'http://<IP>:5173/lan'}</code></div>
+                      <div style={{ marginTop: '2px' }}>2. Enter the same Room Code: <strong style={{ color: 'var(--wallet-navy)' }}>{roomId}</strong></div>
+                      <div style={{ marginTop: '2px' }}>3. Click <strong>Join LAN Room</strong></div>
+                    </div>
                   </>
                 ) : (
                   <p style={{ margin: 0 }}>Join a room to discover local peers.</p>
@@ -744,41 +752,83 @@ export default function LanChat() {
               </button>
             </div>
           ) : (
-            <form 
-              onSubmit={handleChatFormSubmit}
-              style={{ padding: '16px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '10px', alignItems: 'center' }}
-            >
-              <button 
-                type="button"
-                className="btn btn-secondary"
-                style={{ padding: '12px 14px' }}
-                onClick={() => imageInputRef.current?.click()}
-                disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
-                title="Attach Image or QR Code"
+            <>
+              {activePeer && activePeer.handshakeStatus === 'established' && !activePeer.sasVerified && (
+                <div style={{
+                  margin: '0 20px 10px 20px',
+                  padding: '12px 16px',
+                  background: '#fef3c7',
+                  border: '2px solid #f59e0b',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ShieldCheck size={22} style={{ color: '#d97706', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#92400e' }}>
+                        VERIFICATION CODE: <strong style={{ fontSize: '1rem', letterSpacing: '2px', color: '#78350f', backgroundColor: '#fde68a', padding: '1px 8px', borderRadius: '4px' }}>{activePeer.securityCode}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#b45309' }}>
+                        Confirm both devices display the same code, then click Unlock Chat to enable messaging.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700, backgroundColor: '#d97706', borderColor: '#b45309' }}
+                    onClick={() => confirmPeerSecurityCode(activePeer.peerId)}
+                  >
+                    <CheckCircle2 size={16} /> Unlock Chat
+                  </button>
+                </div>
+              )}
+              <form 
+                onSubmit={handleChatFormSubmit}
+                style={{ padding: '16px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '10px', alignItems: 'center' }}
               >
-                <ImageIcon size={18} />
-              </button>
-              <input 
-                type="text"
-                className="wallet-input"
-                placeholder={
-                  selectedImage 
-                    ? "Add optional caption for this encrypted image..." 
-                    : (activePeer ? `Encrypted message to ${activePeer.name}...` : 'Select a peer to start typing...')
-                }
-                value={inputText}
-                disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
-                onChange={(e) => setInputText(e.target.value)}
-                style={{ flex: 1 }}
-              />
-              <button 
-                type="submit" 
-                className="btn btn-primary"
-                disabled={(!inputText.trim() && !selectedImage) || !activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
-              >
-                <Send size={16} /> Send
-              </button>
-            </form>
+                <button 
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '12px 14px' }}
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
+                  title="Attach Image or QR Code"
+                >
+                  <ImageIcon size={18} />
+                </button>
+                <input 
+                  type="text" 
+                  className="wallet-input"
+                  placeholder={
+                    selectedImage 
+                      ? "Add optional caption for this encrypted image..." 
+                      : !activePeer
+                      ? 'Select a peer from the left to start typing...'
+                      : activePeer.handshakeStatus === 'pending'
+                      ? 'Negotiating end-to-end encrypted session...'
+                      : !activePeer.sasVerified
+                      ? `Click "Unlock Chat" above to verify code ${activePeer.securityCode || ''} and enable messaging...`
+                      : `Encrypted message to ${activePeer.name}...`
+                  }
+                  value={inputText}
+                  disabled={!activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
+                  onChange={(e) => setInputText(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={(!inputText.trim() && !selectedImage) || !activePeer || activePeer.handshakeStatus !== 'established' || !activePeer.sasVerified}
+                >
+                  <Send size={16} /> Send
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>

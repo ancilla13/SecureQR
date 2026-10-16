@@ -39,8 +39,8 @@ export function LanProvider({ children }) {
   const [wsUrl, setWsUrl] = useState(() => {
     if (typeof window !== 'undefined') {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname || 'localhost';
-      return `${protocol}//${host}:4000/ws`;
+      // Route via proxy on current origin so LAN peers only need access to the web server port
+      return `${protocol}//${window.location.host}/ws`;
     }
     return 'ws://localhost:4000/ws';
   });
