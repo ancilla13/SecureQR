@@ -41,10 +41,6 @@ export function LanProvider({ children }) {
       // Same-origin /ws: the Vite dev server proxies it to the relay on :4000,
       // so it works over HTTPS (wss) and from other devices on the LAN.
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // Route via proxy on current origin so LAN peers only need access to the web server port
-      // Same-origin /ws: the Vite dev server proxies it to the relay on :4000,
-      // so it works over HTTPS (wss) and from other devices on the LAN.
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${protocol}//${window.location.host}/ws`;
     }
     return 'ws://localhost:4000/ws';
