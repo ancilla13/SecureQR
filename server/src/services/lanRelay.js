@@ -45,6 +45,7 @@ export function setupLanRelay(httpServer) {
               rooms.set(roomId, new Map());
             }
             const room = rooms.get(roomId);
+            console.log(`[LAN Relay] ${name} (${peerId}) from ${req.socket.remoteAddress} joined room "${roomId}" (${room.size + 1} peer(s))`);
 
             // Store peer connection
             room.set(peerId, { ws, name, kid, joinedAt: Date.now() });

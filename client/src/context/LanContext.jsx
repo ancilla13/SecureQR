@@ -38,9 +38,10 @@ export function LanProvider({ children }) {
   // Network connection state
   const [wsUrl, setWsUrl] = useState(() => {
     if (typeof window !== 'undefined') {
+      // Same-origin /ws: the Vite dev server proxies it to the relay on :4000,
+      // so it works over HTTPS (wss) and from other devices on the LAN.
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname || 'localhost';
-      return `${protocol}//${host}:4000/ws`;
+      return `${protocol}//${window.location.host}/ws`;
     }
     return 'ws://localhost:4000/ws';
   });
