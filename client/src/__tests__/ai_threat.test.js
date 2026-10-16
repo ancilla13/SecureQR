@@ -191,3 +191,23 @@ describe('Pretrained Phishing URL Classifier (pirocheto/phishing-url-detection)'
   });
 
 });
+
+describe('Lookalike domain heuristics', () => {
+  it.each([
+    'https://www.g00gle.com',
+    'https://paypa1.com/account',
+    'https://p0rtal.apex.edu/transcript?student=92841'
+  ])('flags %s as Dangerous', (url) => {
+    const r = analyzeThreat(url);
+    expect(r.riskLevel).toBe('Dangerous');
+    expect(r.reasons.join(' ')).toMatch(/Lookalike domain/);
+  });
+
+  it.each([
+    'https://www.google.com',
+    'https://portal.apex.edu/transcript?student=92841',
+    'https://example.com'
+  ])('does not flag genuine %s', (url) => {
+    expect(analyzeThreat(url).reasons.join(' ')).not.toMatch(/Lookalike domain/);
+  });
+});

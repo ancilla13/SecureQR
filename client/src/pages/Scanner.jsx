@@ -117,6 +117,88 @@ async function decodeQrImage(fileOrBlob) {
   );
 }
 
+
+/**
+ * A QR code cannot hold an image, so an "image_cert" payload only carries the
+ * image's SHA-256. The recipient attaches the original image here; it is shown
+ * only if its hash matches the (already signature-checked) hash in the payload.
+ */
+function parseImageCert(content) {
+  if (typeof content !== 'string' || !content.trimStart().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(content);
+    return parsed && parsed.type === 'image_cert' && parsed.sha256 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function ImageCertViewer({ cert, signatureOk }) {
+  const [preview, setPreview] = useState('');
+  const [status, setStatus] = useState(null); // null | 'match' | 'mismatch'
+  const [fileName, setFileName] = useState('');
+  const inputRef = useRef(null);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+      setStatus('mismatch');
+      setPreview('');
+      setFileName(file.name);
+      return;
+    }
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    setFileName(file.name);
+    if (hex === String(cert.sha256).toLowerCase()) {
+      setStatus('match');
+      setPreview(URL.createObjectURL(new Blob([buffer], { type: file.type })));
+    } else {
+      setStatus('mismatch');
+      setPreview('');
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '16px', border: '1px solid var(--wallet-border)', borderRadius: '12px', padding: '16px' }}>
+      <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+        Signed image: {cert.title || cert.fileName}
+      </div>
+      <p style={{ fontSize: '0.85rem', margin: '0 0 10px', color: 'var(--wallet-text-secondary)' }}>
+        The QR only contains the image's fingerprint, not the picture. Attach the image file you
+        received ({cert.fileName}) to check it against the signed fingerprint.
+      </p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: 'none' }}
+        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }}
+      />
+      <button className="btn btn-secondary" onClick={() => inputRef.current?.click()}>
+        <ImageIcon size={16} /> Attach image to verify
+      </button>
+
+      {status === 'match' && (
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ color: signatureOk ? '#15803d' : '#b45309', fontWeight: 600, marginBottom: '8px' }}>
+            {signatureOk
+              ? '✓ Image matches the signed fingerprint (unaltered).'
+              : '⚠ Image matches the fingerprint in this QR, but the QR signature itself is not trusted.'}
+          </div>
+          <img src={preview} alt={cert.title || fileName} style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px' }} />
+        </div>
+      )}
+      {status === 'mismatch' && (
+        <div style={{ marginTop: '12px', color: '#b91c1c', fontWeight: 600 }}>
+          ✗ "{fileName}" does not match the signed image. It was altered or is a different file.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Scanner() {
   const [activeTab, setActiveTab] = useState('camera'); // 'camera' | 'paste'
   
@@ -1277,6 +1359,13 @@ export default function Scanner() {
                       </button>
                     )}
                   </div>
+
+                  {parseImageCert(scanResult.content) && (
+                    <ImageCertViewer
+                      cert={parseImageCert(scanResult.content)}
+                      signatureOk={String(scanResult.outcome || '').startsWith('VALID')}
+                    />
+                  )}
                 </div>
 
                 {/* URL Threat Intelligence Card (Heuristics + Pretrained AI Phishing Classifier) */}

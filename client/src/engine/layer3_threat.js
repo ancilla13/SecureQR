@@ -15,6 +15,66 @@ const HIGH_RISK_TLDS = new Set([
   'tk', 'ml', 'ga', 'cf', 'gq', 'top', 'xyz', 'work', 'loan'
 ]);
 
+import trustedIssuers from '../data/cachedTrustedIssuers.json';
+
+// Domains users commonly trust; a near-miss spelling of any of these is a lookalike attack.
+const PROTECTED_DOMAINS = [
+  'google.com', 'paypal.com', 'apple.com', 'microsoft.com', 'amazon.com',
+  'netflix.com', 'facebook.com', 'instagram.com', 'github.com', 'linkedin.com',
+  'chase.com', 'whatsapp.com', 'dropbox.com'
+];
+
+// Characters attackers swap in for letters (0 -> o, 1 -> l, rn -> m, ...)
+const CONFUSABLES = [
+  [/rn/g, 'm'], [/vv/g, 'w'], [/0/g, 'o'], [/1/g, 'l'], [/3/g, 'e'],
+  [/4/g, 'a'], [/5/g, 's'], [/7/g, 't'], [/\$/g, 's']
+];
+
+function registrableDomain(host) {
+  const parts = host.split('.');
+  if (parts.length <= 2) return host;
+  // Keep two labels, or three for ccTLD style suffixes such as .co.uk / .edu.au
+  const secondLevel = parts[parts.length - 2];
+  const keep = ['co', 'com', 'edu', 'gov', 'org', 'net', 'ac'].includes(secondLevel) && parts[parts.length - 1].length === 2 ? 3 : 2;
+  return parts.slice(-keep).join('.');
+}
+
+function normalizeConfusables(label) {
+  return CONFUSABLES.reduce((acc, [re, to]) => acc.replace(re, to), label);
+}
+
+function trustedIssuerHosts() {
+  const hosts = [];
+  for (const issuer of trustedIssuers.issuers || []) {
+    try { hosts.push(new URL(issuer.website).hostname.toLowerCase()); } catch { /* ignore */ }
+  }
+  return hosts;
+}
+
+/**
+ * Detects hosts that imitate a protected domain via character swaps
+ * (g00gle.com, paypa1.com, p0rtal.apex.edu). Returns the imitated host or null.
+ */
+function findLookalike(host) {
+  const candidates = [
+    ...PROTECTED_DOMAINS.map(d => ({ full: d, base: d })),
+    ...trustedIssuerHosts().map(h => ({ full: h, base: registrableDomain(h) }))
+  ];
+
+  for (const { full, base } of candidates) {
+    if (host === full || host === base || host.endsWith(`.${base}`) && normalizeConfusables(host) === host) continue;
+
+    // Whole-host comparison (covers swaps in subdomains like p0rtal.apex.edu)
+    const normHost = normalizeConfusables(host);
+    if (host !== full && normHost === full) return full;
+
+    // Registrable-domain comparison (covers www.g00gle.com)
+    const reg = registrableDomain(host);
+    if (reg !== base && normalizeConfusables(reg) === base) return base;
+  }
+  return null;
+}
+
 const BRAND_KEYWORDS = [
   'paypal', 'google', 'apple', 'microsoft', 'amazon', 'netflix', 'chase', 'bank'
 ];
@@ -156,6 +216,15 @@ export function analyzeThreat(inputContent) {
     if (host.includes('xn--')) {
       score += 45;
       reasons.push('Uses Punycode encoding (often used to forge lookalike domain characters).');
+    }
+
+    // 3b. Lookalike domain (digit/letter swaps such as g00gle.com)
+    if (!isIpHost) {
+      const imitated = findLookalike(host);
+      if (imitated) {
+        score += 65;
+        reasons.push(`Lookalike domain: '${host}' imitates '${imitated}' using swapped characters.`);
+      }
     }
 
     // 4. URL Shortener Detection
