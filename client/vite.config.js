@@ -9,6 +9,7 @@ export default defineConfig({
   plugins: [react(), basicSsl()],
   server: {
     host: true, // listen on all interfaces so other LAN devices can connect
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:4000',
