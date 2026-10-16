@@ -205,12 +205,23 @@ export default function TrustedContacts() {
 
   return (
     <div className="wallet-page animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Trusted Contacts & Public Keys</h1>
-        <p className="page-subtitle">
-          Manage verified peer identities for ECDSA P-256 digital signature verification.
-          Distinguish explicitly verified identities from unconfirmed imported keys.
-        </p>
+      <div className="page-editorial-header">
+        <div className="editorial-header-left">
+          <span className="page-index-label">/03 KEYSTORE</span>
+          <h1 className="page-editorial-title">TRUSTED CONTACTS</h1>
+          <p className="page-editorial-desc">
+            Manage verified peer identities and public keys for deterministic ECDSA P-256 signature verification.
+          </p>
+        </div>
+        <div className="editorial-header-right">
+          <div className="badge-lime">
+            <span className="pulse-dot dot-lime" />
+            <span>LOCAL INDEXEDDB V2</span>
+          </div>
+          <div className="technical-coordinates">
+            RFC 7517 // JWK KEYSTORE
+          </div>
+        </div>
       </div>
 
       {successMsg && (

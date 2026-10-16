@@ -1,67 +1,388 @@
+/* ==========================================================================
+   SECUREQR — CYBER BRUTALISM ARCHITECTURAL LAYOUT
+   Full-width viewport shell, architectural navigation, gutters 24-48px,
+   monochrome dividers, and bottom cryptographic status strip.
+   ========================================================================== */
+
 .app-container {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  position: relative;
+  background-color: var(--bg-primary);
+}
+
+/* ==========================================================================
+   FULL-WIDTH TOP ARCHITECTURAL NAVIGATION
+   ========================================================================== */
+.navbar-wrapper {
+  width: 100%;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
 .navbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
-  margin: 16px;
-  border-radius: 16px;
-  position: sticky;
-  top: 16px;
-  z-index: 100;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 64px;
+  padding: 0 32px;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Left Section: Brand & Status */
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-decoration: none;
-  font-size: 1.5rem;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
 }
 
-.text-accent-primary {
-  color: var(--accent-primary);
+.nav-brand:hover {
+  opacity: 0.85;
 }
 
-.font-bold {
+.nav-brand-bracket {
+  color: var(--accent-violet);
+  font-family: var(--font-mono);
   font-weight: 700;
 }
 
-.nav-links {
-  display: flex;
-  gap: 24px;
-}
-
-.nav-link {
+.nav-status-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.nav-status-indicator .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-success);
+  box-shadow: 0 0 8px var(--status-success);
+}
+
+/* Middle Section: Links with Architectural Dividers */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+}
+
+.nav-divider {
+  color: var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  user-select: none;
+  padding: 0 12px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   text-decoration: none;
   color: var(--text-secondary);
-  font-weight: 500;
-  transition: color 0.3s ease;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.15s ease;
+  position: relative;
 }
 
 .nav-link:hover {
   color: var(--text-primary);
 }
 
-.main-content {
-  flex: 1;
-  padding: 32px 16px;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
+.nav-link.active {
+  color: #111111;
+  background: var(--bg-subtle);
+  border-bottom: 2px solid var(--accent-violet);
 }
 
-.footer {
-  text-align: center;
-  padding: 24px;
+.nav-badge-count {
+  background: #EF4444;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* Right Section: Technical Meta & Action */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-meta-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.3;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  border-right: 1px solid var(--border-color);
+  padding-right: 16px;
+}
+
+.nav-meta-block .meta-label {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.nav-meta-block .meta-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.nav-action-btn {
+  padding: 10px 18px;
+  font-size: 0.82rem;
+  border-radius: 0;
+  gap: 8px;
+}
+
+/* Mobile Toggle */
+.mobile-nav-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+/* Mobile Dropdown */
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 16px 24px;
+  gap: 12px;
+}
+
+.mobile-menu.open {
+  display: flex;
+}
+
+.mobile-menu .nav-link {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   MAIN CONTENT AREA (FULL-WIDTH VIEWPORT WITH RESPONSIVE GUTTERS)
+   ========================================================================== */
+.main-content {
+  flex: 1;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 32px 48px 48px;
+  box-sizing: border-box;
+}
+
+/* Architectural Top Sub-Header Strip (present on all pages) */
+.page-editorial-header {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.editorial-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 800px;
+}
+
+.page-index-label {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--accent-violet);
+  letter-spacing: 0.08em;
+}
+
+.page-editorial-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 4.8vw, 4.4rem);
+  font-weight: 900;
+  line-height: 0.96;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  margin: 0;
+  text-align: left;
+}
+
+.page-editorial-desc {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.editorial-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.technical-coordinates {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   ARCHITECTURAL BOTTOM STATUS STRIP (CYBER BRUTALISM FOOTER)
+   ========================================================================== */
+.footer-strip {
+  width: 100%;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: 44px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: auto;
+}
+
+.footer-strip-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border-right: 1px solid var(--border-color);
+}
+
+.footer-strip-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 24px;
+  background: var(--accent-violet);
+  color: #FFFFFF;
+  font-weight: 700;
+  flex: 1;
+  text-align: center;
+}
+
+.footer-strip-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  border-left: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINTS
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .navbar {
+    padding: 0 20px;
+  }
+  .main-content {
+    padding: 24px 24px 36px;
+  }
+  .nav-meta-block {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0 16px;
+  }
+  .nav-links, .nav-right {
+    display: none;
+  }
+  .mobile-nav-toggle {
+    display: flex;
+  }
+  .main-content {
+    padding: 16px 16px 32px;
+  }
+  .page-editorial-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .editorial-header-right {
+    align-items: flex-start;
+  }
+  .footer-strip {
+    flex-direction: column;
+  }
+  .footer-strip-left, .footer-strip-center, .footer-strip-right {
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 16px;
+    justify-content: flex-start;
+  }
 }

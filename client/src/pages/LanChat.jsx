@@ -1,13 +1,16 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Radio, Lock, ShieldCheck, ShieldAlert, Key, Send, 
   Users, Check, Copy, RefreshCw, Eye, X, AlertTriangle,
-  CheckCircle2, ArrowRight, UserPlus, Info, XCircle
+  CheckCircle2, ArrowRight, UserPlus, Info, XCircle,
+  Image as ImageIcon, Paperclip, Download, Maximize2, Shield, QrCode
 } from 'lucide-react';
 import { useLan } from '../context/LanContext.jsx';
 import '../styles/wallet.css';
 
 export default function LanChat() {
+  const navigate = useNavigate();
   const {
     identity,
     loadingIdentity,
@@ -29,27 +32,162 @@ export default function LanChat() {
     disconnectLan,
     initiateHandshakeWithPeer,
     handleSendMessage,
+    handleSendImage,
     handleShareMyPublicKey,
     handleSaveContactFromChat,
     handleGenerateFreshIdentity,
     handleEndChat
   } = useLan();
 
+  const [selectedImage, setSelectedImage] = useState(null); // { dataUrl, fileName, fileSize }
+  const [inspectingImage, setInspectingImage] = useState(null); // full-size viewer modal
+  const [isDragOverChat, setIsDragOverChat] = useState(false);
+
+  const imageInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll chat window
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, selectedImage]);
+
+  // Read image file into DataURL and stage it
+  const processImageFile = (file) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      alert('Selected file is not an image. Please choose a PNG, JPG, WebP, or SVG file.');
+      return;
+    }
+    // Max 15MB
+    if (file.size > 15 * 1024 * 1024) {
+      alert('Image file is too large (max 15MB).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setSelectedImage({
+        dataUrl: e.target.result,
+        fileName: file.name || 'lan_attachment.png',
+        fileSize: file.size
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    e.target.value = '';
+  };
+
+  // Clipboard paste listener: paste screenshots directly into chat
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            processImageFile(file);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  const chatDragCounterRef = useRef(0);
+
+  const handleChatDragEnter = (e) => {
+    e.preventDefault();
+    chatDragCounterRef.current += 1;
+    setIsDragOverChat(true);
+  };
+
+  const handleChatDragOver = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    setIsDragOverChat(true);
+  };
+
+  const handleChatDragLeave = (e) => {
+    e.preventDefault();
+    chatDragCounterRef.current -= 1;
+    if (chatDragCounterRef.current <= 0) {
+      chatDragCounterRef.current = 0;
+      setIsDragOverChat(false);
+    }
+  };
+
+  const handleChatDrop = (e) => {
+    e.preventDefault();
+    chatDragCounterRef.current = 0;
+    setIsDragOverChat(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      const imgFile = Array.from(files).find((f) => f.type && f.type.startsWith('image/'));
+      if (imgFile) {
+        processImageFile(imgFile);
+      }
+    }
+  };
+
+  // Form submit handler supporting both text and image attachments
+  const handleChatFormSubmit = async (e) => {
+    e.preventDefault();
+    if (selectedImage) {
+      const { dataUrl, fileName } = selectedImage;
+      setSelectedImage(null);
+      await handleSendImage(dataUrl, inputText.trim(), fileName);
+      setInputText('');
+    } else {
+      await handleSendMessage(e);
+    }
+  };
+
+  // Download received or sent image
+  const handleDownloadImage = (dataUrl, fileName = 'secureqr_image.png') => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = fileName;
+    a.click();
+  };
+
+  // One-click Verify in Scanner
+  const handleVerifyInScanner = (dataUrl) => {
+    sessionStorage.setItem('pending_scan_image', dataUrl);
+    navigate('/scanner');
+  };
 
   return (
     <div className="wallet-page animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Authenticated LAN Chat & Key Exchange</h1>
-        <p className="page-subtitle">
-          Peer-to-peer end-to-end encrypted messaging via ECDH P-256 + HKDF + AES-256-GCM.
-          Share public keys over your local network and verify SHA-256 fingerprints directly.
-        </p>
+      <div className="page-editorial-header">
+        <div className="editorial-header-left">
+          <span className="page-index-label">/04 RELAY</span>
+          <h1 className="page-editorial-title">LAN RELAY &amp; KEY EXCHANGE</h1>
+          <p className="page-editorial-desc">
+            Peer-to-peer end-to-end encrypted messaging via ECDH P-256 + HKDF + AES-256-GCM.
+            Share public keys over your local network and verify SHA-256 fingerprints directly.
+          </p>
+        </div>
+        <div className="editorial-header-right">
+          <div className="badge-lime">
+            <span className="pulse-dot dot-lime" />
+            <span>P2P RELAY ENCRYPTED</span>
+          </div>
+          <div className="technical-coordinates">
+            ECDH // AES-256-GCM TUNNEL
+          </div>
+        </div>
       </div>
 
       {contactSavedMsg && (
@@ -236,7 +374,27 @@ export default function LanChat() {
         </div>
 
         {/* Right Column: Encrypted Chat Feed & Controls */}
-        <div className="wallet-card" style={{ height: '600px', display: 'flex', flexDirection: 'column', padding: 0 }}>
+        <div 
+          className="wallet-card" 
+          style={{ height: '600px', display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}
+          onDragEnter={handleChatDragEnter}
+          onDragOver={handleChatDragOver}
+          onDragLeave={handleChatDragLeave}
+          onDrop={handleChatDrop}
+        >
+          {isDragOverChat && (
+            <div className="chat-drop-overlay">
+              <div className="chat-drop-card">
+                <ImageIcon size={36} color="var(--accent-lime)" />
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem', color: '#FFFFFF', letterSpacing: '0.05em' }}>
+                  DROP IMAGE TO STAGE FOR ENCRYPTION
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#A0A0A5', fontFamily: 'var(--font-mono)' }}>
+                  PNG, JPG, WebP, GIF, SVG (up to 15 MB) • Encrypted via AES-256-GCM
+                </span>
+              </div>
+            </div>
+          )}
           
           {/* Active Chat Header */}
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--wallet-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -387,28 +545,98 @@ export default function LanChat() {
                     key={m.id}
                     style={{
                       alignSelf: m.isMine ? 'flex-end' : 'flex-start',
-                      maxWidth: '75%',
+                      maxWidth: '78%',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: m.isMine ? 'flex-end' : 'flex-start'
                     }}
                   >
-                    <div style={{ fontSize: '0.72rem', color: 'var(--wallet-text-secondary)', marginBottom: '3px', padding: '0 4px' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '3px', padding: '0 4px', fontFamily: 'var(--font-mono)' }}>
                       {m.isMine ? 'You' : m.senderName} • {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
-                    <div 
-                      style={{
-                        padding: '10px 14px',
-                        borderRadius: m.isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                        backgroundColor: m.isMine ? 'var(--wallet-blue)' : '#f1f5f9',
-                        color: m.isMine ? '#ffffff' : 'var(--wallet-text-primary)',
-                        fontSize: '0.92rem',
-                        lineHeight: 1.4,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      {m.text}
-                    </div>
+
+                    {m.isImage && m.imageData?.dataUrl ? (
+                      <div 
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          background: '#111114',
+                          padding: '10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          maxWidth: '380px',
+                          width: '100%'
+                        }}
+                      >
+                        <div 
+                          style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', background: '#000000', border: '1px solid #27272a' }}
+                          onClick={() => setInspectingImage(m.imageData)}
+                          title="Click to view full image"
+                        >
+                          <img 
+                            src={m.imageData.dataUrl} 
+                            alt={m.imageData.fileName || 'Encrypted attachment'}
+                            style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', display: 'block' }}
+                          />
+                        </div>
+
+                        {/* Image Action Bar */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #27272a', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#8E8E93', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                            {m.imageData.fileName || 'IMAGE'}
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                              onClick={() => setInspectingImage(m.imageData)}
+                              title="Inspect Full Image"
+                            >
+                              <Maximize2 size={12} /> View
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-lime"
+                              style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                              onClick={() => handleVerifyInScanner(m.imageData.dataUrl)}
+                              title="Load and Verify QR in Scanner"
+                            >
+                              <QrCode size={12} /> Scan ↗
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-dark"
+                              style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                              onClick={() => handleDownloadImage(m.imageData.dataUrl, m.imageData.fileName)}
+                              title="Download Image"
+                            >
+                              <Download size={12} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {m.text && (
+                          <div style={{ color: '#F5F5F2', fontSize: '0.88rem', marginTop: '2px', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>
+                            {m.text}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div 
+                        style={{
+                          padding: '10px 14px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: m.isMine ? '#111111' : '#FFFFFF',
+                          color: m.isMine ? '#FFFFFF' : '#111111',
+                          fontSize: '0.92rem',
+                          lineHeight: 1.4,
+                          boxShadow: 'none'
+                        }}
+                      >
+                        {m.text}
+                      </div>
+                    )}
 
                     {m.envelope && (
                       <button
@@ -419,11 +647,12 @@ export default function LanChat() {
                           padding: '2px 4px',
                           cursor: 'pointer',
                           fontSize: '0.68rem',
-                          color: 'var(--wallet-text-secondary)',
+                          color: 'var(--text-secondary)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '3px',
-                          marginTop: '2px'
+                          marginTop: '2px',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
                         <Lock size={10} /> AES-256-GCM (Seq #{m.envelope.seq}) • Audit Ciphertext
@@ -436,9 +665,57 @@ export default function LanChat() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Staged Image Preview Bar (Above Input) */}
+          {selectedImage && (
+            <div 
+              style={{
+                padding: '10px 20px',
+                borderTop: '1px solid var(--border-color)',
+                background: 'var(--bg-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
+                <img 
+                  src={selectedImage.dataUrl} 
+                  alt="Staged attachment" 
+                  style={{ width: '44px', height: '44px', objectFit: 'cover', border: '1px solid var(--border-color)', flexShrink: 0 }}
+                />
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {selectedImage.fileName}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                    {(selectedImage.fileSize / 1024).toFixed(1)} KB • Encrypted with AES-256-GCM upon send
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '0.78rem', flexShrink: 0 }}
+                onClick={() => setSelectedImage(null)}
+              >
+                <X size={14} /> Remove
+              </button>
+            </div>
+          )}
+
+          {/* Hidden File Input for Image Attachments */}
+          <input 
+            type="file" 
+            ref={imageInputRef} 
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleImageFileChange}
+          />
+
           {/* Message Input or Reconnect Action */}
           {activePeer && activePeer.handshakeStatus !== 'established' ? (
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--wallet-border)', background: '#fffbeb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-color)', background: '#fffbeb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.84rem', color: '#b45309', fontWeight: 600 }}>
                 Secure session is ended. Ephemeral AES keys are purged.
               </span>
@@ -453,13 +730,27 @@ export default function LanChat() {
             </div>
           ) : (
             <form 
-              onSubmit={handleSendMessage}
-              style={{ padding: '16px 20px', borderTop: '1px solid var(--wallet-border)', display: 'flex', gap: '10px' }}
+              onSubmit={handleChatFormSubmit}
+              style={{ padding: '16px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '10px', alignItems: 'center' }}
             >
+              <button 
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '12px 14px' }}
+                onClick={() => imageInputRef.current?.click()}
+                disabled={!activePeer || activePeer.handshakeStatus !== 'established'}
+                title="Attach Image or QR Code"
+              >
+                <ImageIcon size={18} />
+              </button>
               <input 
                 type="text"
                 className="wallet-input"
-                placeholder={activePeer ? `Encrypted message to ${activePeer.name}...` : 'Select a peer to start typing...'}
+                placeholder={
+                  selectedImage 
+                    ? "Add optional caption for this encrypted image..." 
+                    : (activePeer ? `Encrypted message to ${activePeer.name}...` : 'Select a peer to start typing...')
+                }
                 value={inputText}
                 disabled={!activePeer || activePeer.handshakeStatus !== 'established'}
                 onChange={(e) => setInputText(e.target.value)}
@@ -468,7 +759,7 @@ export default function LanChat() {
               <button 
                 type="submit" 
                 className="btn btn-primary"
-                disabled={!inputText.trim() || !activePeer || activePeer.handshakeStatus !== 'established'}
+                disabled={(!inputText.trim() && !selectedImage) || !activePeer || activePeer.handshakeStatus !== 'established'}
               >
                 <Send size={16} /> Send
               </button>
@@ -476,6 +767,79 @@ export default function LanChat() {
           )}
         </div>
       </div>
+
+      {/* MODAL: Fullscreen Image Inspector */}
+      {inspectingImage && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(17, 17, 20, 0.88)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000000,
+          padding: '24px'
+        }}>
+          <div style={{
+            background: 'var(--panel-dark)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 0,
+            maxWidth: '800px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #27272a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ImageIcon size={20} style={{ color: 'var(--accent-lime)' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 800, color: '#F5F5F2' }}>
+                  {inspectingImage.fileName || 'ENCRYPTED_IMAGE_PAYLOAD'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setInspectingImage(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#F5F5F2' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000000', overflow: 'auto', flex: 1 }}>
+              <img 
+                src={inspectingImage.dataUrl} 
+                alt="Fullscreen" 
+                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+              />
+            </div>
+
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#8E8E93' }}>
+                DECRYPTED WITH AES-256-GCM SESSION KEY
+              </span>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  className="btn btn-lime"
+                  onClick={() => {
+                    setInspectingImage(null);
+                    handleVerifyInScanner(inspectingImage.dataUrl);
+                  }}
+                >
+                  <QrCode size={16} /> Verify in Scanner ↗
+                </button>
+                <button 
+                  className="btn btn-dark"
+                  onClick={() => handleDownloadImage(inspectingImage.dataUrl, inspectingImage.fileName)}
+                >
+                  <Download size={16} /> Download
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Ciphertext Audit Viewer (Zero-Knowledge Proof) */}
       {auditEnvelope && (

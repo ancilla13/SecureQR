@@ -429,13 +429,34 @@ export function LanProvider({ children }) {
         receivedSeqsRef.current = newReceivedSeqs;
         setReceivedSeqs(newReceivedSeqs);
 
+        let isImage = false;
+        let imageData = null;
+        let displayText = decryptedText;
+
+        try {
+          if (decryptedText.startsWith('{"type":"image"') || decryptedText.startsWith('{"type":"media"')) {
+            const parsed = JSON.parse(decryptedText);
+            if (parsed.type === 'image' && parsed.dataUrl) {
+              isImage = true;
+              imageData = parsed;
+              displayText = parsed.caption || '';
+            }
+          } else if (decryptedText.startsWith('data:image/')) {
+            isImage = true;
+            imageData = { type: 'image', dataUrl: decryptedText, caption: '' };
+            displayText = '';
+          }
+        } catch {}
+
         setMessages(prev => [
           ...prev,
           {
             id: `msg_${Date.now()}_${Math.random()}`,
             fromPeerId,
             senderName: peer.name || 'Peer',
-            text: decryptedText,
+            text: displayText,
+            isImage,
+            imageData,
             timestamp: payload.envelope.timestamp || Date.now(),
             isMine: false,
             envelope: payload.envelope
@@ -554,6 +575,63 @@ export function LanProvider({ children }) {
       setInputText('');
     } catch (err) {
       console.error('Failed to send encrypted message:', err);
+    }
+  };
+
+  // Send an encrypted image message to the active peer
+  const handleSendImage = async (dataUrl, caption = '', fileName = 'image.png') => {
+    const currentActivePeerId = activePeerIdRef.current || activePeerId;
+    if (!dataUrl || !currentActivePeerId) return;
+
+    const peer = peersRef.current[currentActivePeerId];
+    if (!peer || peer.handshakeStatus !== 'established' || !peer.sessionKey) {
+      alert('Secure E2EE handshake is not established with this peer yet.');
+      return;
+    }
+
+    const currentSeq = (seqCounters[currentActivePeerId] || 0) + 1;
+    setSeqCounters(prev => ({ ...prev, [currentActivePeerId]: currentSeq }));
+
+    try {
+      const payloadString = JSON.stringify({
+        type: 'image',
+        dataUrl,
+        caption: caption ? caption.trim() : '',
+        fileName: fileName || 'image.png'
+      });
+
+      const envelope = await encryptMessage(peer.sessionKey, payloadString, currentSeq);
+
+      wsRef.current?.send(JSON.stringify({
+        type: 'signal',
+        targetPeerId: currentActivePeerId,
+        payload: {
+          action: 'encrypted_message',
+          envelope
+        }
+      }));
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `msg_${Date.now()}_${Math.random()}`,
+          fromPeerId: myPeerIdRef.current,
+          senderName: identity?.alias || 'You',
+          text: caption ? caption.trim() : '',
+          isImage: true,
+          imageData: {
+            type: 'image',
+            dataUrl,
+            caption: caption ? caption.trim() : '',
+            fileName: fileName || 'image.png'
+          },
+          timestamp: Date.now(),
+          isMine: true,
+          envelope
+        }
+      ]);
+    } catch (err) {
+      console.error('Failed to send encrypted image:', err);
     }
   };
 
@@ -693,6 +771,7 @@ export function LanProvider({ children }) {
     disconnectLan,
     initiateHandshakeWithPeer,
     handleSendMessage,
+    handleSendImage,
     handleShareMyPublicKey,
     handleSaveContactFromChat,
     handleGenerateFreshIdentity,

@@ -504,6 +504,29 @@ export default function Scanner() {
   };
   processQrFileRef.current = processQrFile;
 
+  // Auto-scan QR images forwarded from LAN chat or other workflows
+  useEffect(() => {
+    const pendingDataUrl = sessionStorage.getItem('pending_scan_image');
+    if (pendingDataUrl) {
+      sessionStorage.removeItem('pending_scan_image');
+      (async () => {
+        try {
+          setIsProcessing(true);
+          setProcessingStatus('Decoding forwarded image...');
+          const res = await fetch(pendingDataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], 'lan_forwarded_qr.png', { type: blob.type || 'image/png' });
+          await processQrFile(file);
+        } catch (err) {
+          console.error('Failed to auto-scan forwarded image:', err);
+          setErrorBanner('Could not decode forwarded image: ' + (err.message || 'Unknown error'));
+          setIsProcessing(false);
+          setProcessingStatus('');
+        }
+      })();
+    }
+  }, []);
+
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -591,81 +614,93 @@ export default function Scanner() {
     switch (code) {
       case 'VALID_TRUSTED':
         return {
-          icon: <ShieldCheck size={36} className="text-success" />,
-          title: 'Valid Signature — Trusted Key',
+          icon: <ShieldCheck size={36} style={{ color: '#111111' }} />,
+          title: 'VALID SIGNATURE — TRUSTED KEY',
           badgeClass: 'chip-success',
-          bannerBg: '#f0fdf4',
-          borderColor: '#86efac',
-          textColor: '#166534'
+          bannerBg: 'var(--accent-lime)',
+          borderColor: '#111111',
+          textColor: '#111111'
         };
       case 'VALID_UNKNOWN_KEY':
         return {
-          icon: <AlertTriangle size={36} className="text-warning" />,
-          title: 'Valid Signature — Unknown Key',
+          icon: <AlertTriangle size={36} style={{ color: '#92400E' }} />,
+          title: 'VALID SIGNATURE — UNKNOWN KEY',
           badgeClass: 'chip-warning',
-          bannerBg: '#fffbeb',
-          borderColor: '#fcd34d',
-          textColor: '#92400e'
+          bannerBg: '#FEF3C7',
+          borderColor: '#F59E0B',
+          textColor: '#92400E'
         };
       case 'VALID_IMPORTED_UNCONFIRMED':
         return {
-          icon: <ShieldQuestion size={36} className="text-warning" />,
-          title: 'Valid Signature — Imported Key, Not Yet Trusted',
+          icon: <ShieldQuestion size={36} style={{ color: '#92400E' }} />,
+          title: 'VALID SIGNATURE — IMPORTED KEY, UNCONFIRMED',
           badgeClass: 'chip-warning',
-          bannerBg: '#fffbeb',
-          borderColor: '#fcd34d',
-          textColor: '#92400e'
+          bannerBg: '#FEF3C7',
+          borderColor: '#F59E0B',
+          textColor: '#92400E'
         };
       case 'EXPIRED':
         return {
-          icon: <AlertTriangle size={36} style={{ color: '#ea580c' }} />,
-          title: 'Valid Signature — Payload Expired',
+          icon: <AlertTriangle size={36} style={{ color: '#9A3412' }} />,
+          title: 'VALID SIGNATURE — PAYLOAD EXPIRED',
           badgeClass: 'chip-warning',
-          bannerBg: '#fff7ed',
-          borderColor: '#fdba74',
-          textColor: '#9a3412'
+          bannerBg: '#FFEDD5',
+          borderColor: '#EA580C',
+          textColor: '#9A3412'
         };
       case 'INVALID_SIGNATURE':
         return {
-          icon: <ShieldAlert size={36} className="text-danger" />,
-          title: 'Invalid Signature or Tampered Payload',
-          badgeClass: 'alert-danger',
-          bannerBg: '#fef2f2',
-          borderColor: '#fca5a5',
-          textColor: '#991b1b'
+          icon: <ShieldAlert size={36} style={{ color: '#991B1B' }} />,
+          title: 'INVALID SIGNATURE OR TAMPERED PAYLOAD',
+          badgeClass: 'chip-danger',
+          bannerBg: '#FEE2E2',
+          borderColor: '#EF4444',
+          textColor: '#991B1B'
         };
       case 'UNSIGNED':
         return {
-          icon: <HelpCircle size={36} style={{ color: '#64748b' }} />,
-          title: 'Unsigned or Unsupported QR Payload',
-          badgeClass: 'badge-chip',
-          bannerBg: '#f8fafc',
-          borderColor: '#cbd5e1',
-          textColor: '#334155'
+          icon: <HelpCircle size={36} style={{ color: '#555555' }} />,
+          title: 'UNSIGNED OR UNSUPPORTED QR PAYLOAD',
+          badgeClass: 'chip-neutral',
+          bannerBg: '#FFFFFF',
+          borderColor: 'var(--border-color)',
+          textColor: '#111111'
         };
       case 'UNABLE_TO_VERIFY':
       default:
         return {
-          icon: <ShieldAlert size={36} style={{ color: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#d97706' : '#7c3aed' }} />,
+          icon: <ShieldAlert size={36} style={{ color: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#92400E' : '#8750F7' }} />,
           title: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND'
-            ? 'Signed QR — Creator Public Key Not in Keystore'
-            : 'Unable to Verify — Malformed Payload or Unsupported Key',
-          badgeClass: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? 'chip-warning' : 'alert-danger',
-          bannerBg: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#fffbeb' : '#faf5ff',
-          borderColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#fcd34d' : '#d8b4fe',
-          textColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#92400e' : '#581c87'
+            ? 'SIGNED QR — PUBLIC KEY NOT IN KEYSTORE'
+            : 'UNABLE TO VERIFY — MALFORMED PAYLOAD',
+          badgeClass: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? 'chip-warning' : 'chip-danger',
+          bannerBg: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#FEF3C7' : '#F5F3FF',
+          borderColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#F59E0B' : '#8750F7',
+          textColor: scanResult?.signerTrustStatus === 'KEY_NOT_FOUND' ? '#92400E' : '#111111'
         };
     }
   };
 
   return (
     <div className="wallet-page animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Scan & Verify QR Code</h1>
-        <p className="page-subtitle">
-          Cryptographic ECDSA P-256 signature verification with client-side threat analysis.
-          Inspect payloads with zero automatic network execution.
-        </p>
+      <div className="page-editorial-header">
+        <div className="editorial-header-left">
+          <span className="page-index-label">/01 VERIFICATION</span>
+          <h1 className="page-editorial-title">SCAN & VERIFY</h1>
+          <p className="page-editorial-desc">
+            Zero-trust cryptographic inspection and ECDSA P-256 signature verification.
+            Inspect untrusted payloads with deterministic client-side sandbox isolation.
+          </p>
+        </div>
+        <div className="editorial-header-right">
+          <div className="badge-lime">
+            <span className="pulse-dot dot-lime" />
+            <span>ALL SYSTEMS OPERATIONAL</span>
+          </div>
+          <div className="technical-coordinates">
+            ALGO: ECDSA_P256 // DIGEST: SHA-256
+          </div>
+        </div>
       </div>
 
       {/* Full-Screen Drag & Drop Overlay */}
@@ -678,10 +713,10 @@ export default function Scanner() {
           bottom: 0,
           width: '100vw',
           height: '100vh',
-          backgroundColor: 'rgba(15, 23, 42, 0.82)',
+          backgroundColor: 'rgba(17, 17, 20, 0.88)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          border: '4px dashed #6366f1',
+          border: '4px dashed var(--accent-violet)',
           zIndex: 999999,
           display: 'flex',
           flexDirection: 'column',
@@ -691,21 +726,21 @@ export default function Scanner() {
           color: '#ffffff'
         }}>
           <div style={{
-            background: 'rgba(30, 41, 59, 0.95)',
-            border: '1.5px solid rgba(99, 102, 241, 0.4)',
-            borderRadius: '24px',
+            background: 'var(--panel-dark)',
+            border: '1px solid var(--accent-violet)',
+            borderRadius: 0,
             padding: '44px 56px',
             textAlign: 'center',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
+            boxShadow: 'none',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center'
           }}>
-            <FileUp size={64} style={{ color: '#818cf8', animation: 'bounce 1s infinite' }} />
-            <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f8fafc', marginTop: '20px', letterSpacing: '-0.02em' }}>
+            <FileUp size={64} style={{ color: 'var(--accent-lime)', animation: 'bounce 1s infinite' }} />
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: '#f8fafc', marginTop: '20px', fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
               Drop QR Code Anywhere to Verify
             </h2>
-            <p style={{ color: '#cbd5e1', fontSize: '1.05rem', marginTop: '8px', maxWidth: '420px' }}>
+            <p style={{ color: '#cbd5e1', fontSize: '1rem', marginTop: '8px', maxWidth: '420px', fontFamily: 'var(--font-sans)' }}>
               Release file from Chrome downloads, file explorer, or desktop to decode and verify immediately
             </p>
           </div>
@@ -742,20 +777,25 @@ export default function Scanner() {
       )}
 
       {isProcessing && (
-        <div className="wallet-alert animate-fade-in" style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1d4ed8' }}>
+        <div className="wallet-alert animate-fade-in" style={{ background: '#F5F3FF', border: '1px solid var(--accent-violet)', color: 'var(--accent-violet)' }}>
           <RefreshCw size={20} className="spin" />
-          <span style={{ fontWeight: 600 }}>{processingStatus || 'Verifying QR code payload...'}</span>
+          <span style={{ fontWeight: 700 }}>{processingStatus || 'Verifying QR code payload...'}</span>
         </div>
       )}
 
       {!scanResult ? (
-        <div 
-          className="wallet-card"
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          style={{ position: 'relative' }}
-        >
+        <div className="scanner-workspace-layout">
+          <div 
+            className="wallet-card"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            style={{ position: 'relative' }}
+          >
+            <span className="corner-cross corner-tl">+</span>
+            <span className="corner-cross corner-tr">+</span>
+            <span className="corner-cross corner-bl">+</span>
+            <span className="corner-cross corner-br">+</span>
 
           {/* High-Contrast Segmented Navigation Bar */}
           <div className="scanner-tab-bar">
@@ -1024,14 +1064,69 @@ export default function Scanner() {
                 style={{ alignSelf: 'flex-start' }}
               >
                 {isProcessing ? <RefreshCw className="spin" size={18} /> : <ShieldCheck size={18} />}
-                Inspect & Verify Payload
+                <span>Inspect & Verify Payload</span>
+                <span className="arrow-icon">↗</span>
               </button>
             </div>
           )}
         </div>
+
+        {/* Column 2: Security Operations HUD & Verification Telemetry */}
+        <div className="scanner-hud-sidebar">
+          <span className="corner-cross corner-tl">+</span>
+          <span className="corner-cross corner-tr">+</span>
+          <span className="corner-cross corner-bl">+</span>
+          <span className="corner-cross corner-br">+</span>
+
+          <div className="section-header-row" style={{ marginTop: 0, paddingTop: 0 }}>
+            <div className="section-title-group">
+              <span className="section-index" style={{ marginBottom: 0 }}>/01.B</span>
+              <span className="section-heading-mono">SECURITY TELEMETRY</span>
+            </div>
+            <span className="section-annotation">ACTIVE MONITOR</span>
+          </div>
+
+          <div className="dark-panel" style={{ padding: '20px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: '#8E8E93', marginBottom: '8px' }}>
+              // SCN_01 VERIFICATION TELEMETRY
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: '#00F5A0', lineHeight: 1.6 }}>
+              <div>&gt; CURVE: NIST P-256 (secp256r1)</div>
+              <div>&gt; HASH: SHA-256 PRE-IMAGE DIGEST</div>
+              <div>&gt; KEYSTORE: LOCAL INDEXEDDB V2</div>
+              <div>&gt; PHISHING AI: ONNX MULTI-FEATURE LINEARSVM</div>
+              <div>&gt; SANDBOX: ZERO AUTOMATIC NETWORK EGRESS</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Fast Verification Workflow
+            </div>
+            <div style={{ border: '1px solid var(--border-color)', padding: '16px', background: 'var(--bg-primary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span className="pulse-dot dot-violet" />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700 }}>
+                  DRAG &amp; DROP / CLIPBOARD PASTE
+                </span>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                Drop any downloaded QR code anywhere into the browser or press <kbd style={{ fontFamily: 'var(--font-mono)', background: '#FFFFFF', padding: '2px 6px', border: '1px solid var(--border-color)' }}>Ctrl + V</kbd> to inspect immediately.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="section-annotation">COORDINATES</span>
+              <span className="badge-lime">X_36.1749 Y_-86.7676</span>
+            </div>
+          </div>
+        </div>
+      </div>
       ) : (
         /* RESULT SCREEN: Full 7-State Verification & Safe Content Display */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {/* Top Outcome Banner */}
           {(() => {
             const theme = getOutcomeTheme(scanResult.code);
@@ -1040,34 +1135,34 @@ export default function Scanner() {
                 style={{
                   background: theme.bannerBg,
                   border: `2px solid ${theme.borderColor}`,
-                  borderRadius: '16px',
-                  padding: '24px',
+                  borderRadius: 0,
+                  padding: '28px 32px',
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: '20px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
+                  gap: '24px',
+                  boxShadow: 'none',
+                  position: 'relative'
                 }}
               >
                 <div style={{ flexShrink: 0, marginTop: '2px' }}>
                   {theme.icon}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: theme.textColor, margin: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 900, color: theme.textColor, margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
                       {theme.title}
                     </h2>
                     <span className={`badge-chip ${theme.badgeClass}`}>
                       {scanResult.code}
                     </span>
                   </div>
-                  <p style={{ marginTop: '8px', fontSize: '0.95rem', color: theme.textColor, lineHeight: 1.5 }}>
+                  <p style={{ marginTop: '8px', fontSize: '0.96rem', color: theme.textColor, lineHeight: 1.5, fontFamily: 'var(--font-sans)' }}>
                     {scanResult.explanation}
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
                   <button 
-                    className="btn" 
-                    style={{ background: '#ffffff', color: '#1e293b', border: '1.5px solid #cbd5e1' }}
+                    className="btn btn-secondary" 
                     onClick={resetToNewScan}
                   >
                     <RefreshCw size={16} /> Scan Another

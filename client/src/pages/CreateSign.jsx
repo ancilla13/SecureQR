@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { 
   Key, QrCode, Download, Copy, Check, RefreshCw, 
-  ShieldCheck, Clock, User, FileText, Globe, CheckCircle2, AlertCircle
+  ShieldCheck, Clock, User, FileText, Globe, CheckCircle2, AlertCircle,
+  Image as ImageIcon, Upload, X
 } from 'lucide-react';
 import { 
   loadActiveIdentity, 
@@ -17,9 +18,16 @@ export default function CreateSign() {
   const [aliasInput, setAliasInput] = useState('');
   
   // Payload input fields
-  const [contentType, setContentType] = useState('url'); // 'url' | 'text' | 'payment'
+  const [contentType, setContentType] = useState('url'); // 'url' | 'text' | 'payment' | 'image'
   const [content, setContent] = useState('');
   const [expiryOption, setExpiryOption] = useState('never'); // 'never' | '1h' | '24h' | '7d' | '30d'
+
+  // Image badge credential states
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [imageHash, setImageHash] = useState('');
+  const [imageTitle, setImageTitle] = useState('');
+  const imageInputRef = useRef(null);
   
   // Generation state
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
@@ -46,6 +54,56 @@ export default function CreateSign() {
     }
     loadIdentity();
   }, []);
+
+  const updateImagePayload = (title, hash, file) => {
+    if (!hash || !file) return;
+    const certPayload = JSON.stringify({
+      type: 'image_cert',
+      title: title.trim() || file.name,
+      fileName: file.name,
+      fileSize: file.size,
+      sha256: hash
+    }, null, 2);
+    setContent(certPayload);
+  };
+
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      setError('Please select an image file (PNG, JPG, WebP, SVG).');
+      return;
+    }
+    setError('');
+    setImageFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => setImagePreview(evt.target.result);
+    reader.readAsDataURL(file);
+
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    setImageHash(hashHex);
+
+    updateImagePayload(imageTitle, hashHex, file);
+    e.target.value = '';
+  };
+
+  const handleTitleChange = (val) => {
+    setImageTitle(val);
+    if (imageHash && imageFile) {
+      updateImagePayload(val, imageHash, imageFile);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+    setImageHash('');
+    setContent('');
+  };
 
   const handleCreateNewIdentity = async () => {
     setIsGeneratingKey(true);
@@ -103,7 +161,7 @@ export default function CreateSign() {
         margin: 2,
         errorCorrectionLevel: 'M',
         color: {
-          dark: '#002970', // Deep Navy
+          dark: '#111111', // Pure Black
           light: '#ffffff'
         }
       });
@@ -144,11 +202,23 @@ export default function CreateSign() {
 
   return (
     <div className="wallet-page animate-fade-in">
-      <div className="page-header text-center">
-        <h1 className="page-title">Create & Sign QR</h1>
-        <p className="page-subtitle">
-          Attach a verifiable ECDSA P-256 digital signature to your text, link, or credentials.
-        </p>
+      <div className="page-editorial-header">
+        <div className="editorial-header-left">
+          <span className="page-index-label">/02 SIGNING</span>
+          <h1 className="page-editorial-title">CREATE &amp; SIGN</h1>
+          <p className="page-editorial-desc">
+            Attach a tamper-evident ECDSA P-256 digital signature to your URL, text, or payment credentials.
+          </p>
+        </div>
+        <div className="editorial-header-right">
+          <div className="badge-lime">
+            <span className="pulse-dot dot-lime" />
+            <span>LOCAL KEYSTORE ARMED</span>
+          </div>
+          <div className="technical-coordinates">
+            RFC 7515 // JWS CANONICAL
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -260,19 +330,113 @@ export default function CreateSign() {
                   >
                     <ShieldCheck size={16} /> Credential
                   </button>
+                  <button 
+                    type="button" 
+                    className={`type-toggle-btn ${contentType === 'image' ? 'active' : ''}`}
+                    onClick={() => {
+                      setContentType('image');
+                      if (imageHash && imageFile) {
+                        updateImagePayload(imageTitle, imageHash, imageFile);
+                      }
+                    }}
+                  >
+                    <ImageIcon size={16} /> Image Badge
+                  </button>
                 </div>
               </div>
 
-              <div className="form-group mt-3">
-                <label className="input-label">Payload Content to Sign</label>
-                <textarea 
-                  className="wallet-textarea" 
-                  rows={4}
-                  placeholder={contentType === 'url' ? 'https://your-domain.edu/transcript' : 'Enter plain text or credential data...'}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                />
-              </div>
+              {contentType === 'image' ? (
+                <div className="form-group mt-3">
+                  <label className="input-label">Image Credential / Tamper-Proof Badge</label>
+                  <input 
+                    type="file" 
+                    ref={imageInputRef} 
+                    accept="image/*" 
+                    style={{ display: 'none' }} 
+                    onChange={handleImageFileChange} 
+                  />
+                  {!imageFile ? (
+                    <div 
+                      onClick={() => imageInputRef.current?.click()}
+                      style={{
+                        border: '2px dashed var(--border-color)',
+                        background: 'var(--bg-subtle)',
+                        padding: '24px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Upload size={28} style={{ color: 'var(--accent-violet)' }} />
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700 }}>
+                        SELECT IMAGE TO DIGITALLY SIGN
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Badge, photo ID, document scan, or certificate (PNG, JPG, WebP)
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px solid var(--border-color)', background: 'var(--bg-card)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <img 
+                          src={imagePreview} 
+                          alt="Preview" 
+                          style={{ width: '60px', height: '60px', objectFit: 'cover', border: '1px solid var(--border-color)' }}
+                        />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {imageFile.name}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                            {(imageFile.size / 1024).toFixed(1)} KB • Image Integrity Pre-Image
+                          </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="btn-wallet btn-wallet-ghost text-sm" 
+                          onClick={handleRemoveImage}
+                        >
+                          <X size={14} /> Remove
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="input-label">Credential Title / Subject Name</label>
+                        <input 
+                          type="text" 
+                          className="wallet-input" 
+                          placeholder="e.g. Employee Security Clearance Badge"
+                          value={imageTitle}
+                          onChange={(e) => handleTitleChange(e.target.value)}
+                        />
+                      </div>
+
+                      <div style={{ background: '#111114', padding: '10px 14px', border: '1px solid #27272a' }}>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--accent-lime)', fontFamily: 'var(--font-mono)', display: 'block', marginBottom: '4px' }}>
+                          DIGITAL IMAGE DIGEST (SHA-256):
+                        </span>
+                        <code style={{ fontSize: '0.76rem', color: '#00F5A0', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                          {imageHash}
+                        </code>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="form-group mt-3">
+                  <label className="input-label">Payload Content to Sign</label>
+                  <textarea 
+                    className="wallet-textarea" 
+                    rows={4}
+                    placeholder={contentType === 'url' ? 'https://your-domain.edu/transcript' : 'Enter plain text or credential data...'}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="form-group mt-3">
                 <label className="input-label">Validity & Expiration Policy</label>
